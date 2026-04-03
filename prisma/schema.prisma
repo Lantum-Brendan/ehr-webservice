@@ -1,0 +1,69 @@
+// This is your Prisma schema file for EHR Webservice
+// Add your data models here
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Example Patient model - extend based on your FHIR requirements
+model Patient {
+  id        String   @id @default(uuid())
+  mrn       String   @unique
+  firstName String
+  lastName  String
+  dateOfBirth DateTime
+  gender    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  encounters Encounter[]
+  clinicalNotes ClinicalNote[]
+  billingRecords BillingRecord[]
+
+  @@map("patients")
+}
+
+model Encounter {
+  id           String   @id @default(uuid())
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id])
+  encounterType String
+  startTime    DateTime
+  endTime      DateTime?
+  status       String   @default("planned")
+  createdAt    DateTime @default(now())
+
+  @@map("encounters")
+}
+
+model ClinicalNote {
+  id         String   @id @default(uuid())
+  patientId  String
+  patient    Patient  @relation(fields: [patientId], references: [id])
+  noteText   String   @db.Text
+  authorId   String
+  createdAt  DateTime @default(now())
+
+  @@map("clinical_notes")
+}
+
+model BillingRecord {
+  id         String   @id @default(uuid())
+  patientId  String
+  patient    Patient  @relation(fields: [patientId], references: [id])
+  amount     Float
+  status     String   @default("pending")
+  code       String?
+  createdAt  DateTime @default(now())
+
+  @@map("billing_records")
+}
+
+// Add more models based on your FHIR requirements

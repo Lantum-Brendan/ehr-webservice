@@ -1,0 +1,89 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.sqlite
+
+# Test coverage
+coverage/
+
+# Prisma
+prisma/migrations/*/migration.sql
+!.keep
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# SSL certificates
+*.pem
+*.key
+*.crt
+
+# Docker
+docker-compose.override.yml
+
+# OS-specific
+ehthumbs.db
+Desktop.ini
+
+# Build artifacts if any
+*.tgz
+*.tar.gz
+
+# IntelliJ
+.idea/
+*.iml
+*.iws
+
+# Vim
+*.un~
+
+# Emacs
+*~
+
+# Testcontainers (if used for e2e)
+.testcontainers/
+.vscode-test/
+
+# ESLint cache
+.eslintcache
+
+# TypeScript
+*.tsbuildinfo
+
+# Miscellaneous
+.cache/
+.parcel-cache/

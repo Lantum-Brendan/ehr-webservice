@@ -1,0 +1,24 @@
+# Development Dockerfile
+# Uses hot-reload with tsx for live TypeScript reloading
+
+FROM node:22-slim AS dev
+
+WORKDIR /app
+
+# Install system dependencies (OpenSSL for Prisma)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install dependencies (separate layer for caching)
+COPY package*.json ./
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Expose port
+EXPOSE 3000
+
+# Run with hot reload
+CMD ["npm", "run", "dev"]

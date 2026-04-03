@@ -1,0 +1,94 @@
+services:
+  # Main API service
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DATABASE_URL=${DATABASE_URL}
+      - MONGODB_URL=${MONGODB_URL}
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRY=${JWT_EXPIRY:-15m}
+      - REFRESH_SECRET=${REFRESH_SECRET}
+      - REFRESH_EXPIRY=${REFRESH_EXPIRY:-7d}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
+      - AUDIT_LOG_ENABLED=${AUDIT_LOG_ENABLED:-true}
+      - AUDIT_RETENTION_DAYS=${AUDIT_RETENTION_DAYS:-2555}
+      - FHIR_BASE_URL=${FHIR_BASE_URL}
+      - LAB_API_URL=${LAB_API_URL}
+      - INSURANCE_API_URL=${INSURANCE_API_URL}
+    volumes:
+      - .:/app
+      - /app/node_modules # Prevent host modules bleeding in
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongo:
+        condition: service_started
+    networks:
+      - ehr-network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ehr
+      POSTGRES_PASSWORD: ehr
+      POSTGRES_DB: ehr_dev
+    ports:
+      - "7433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ehr"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - ehr-network
+
+  # Redis Cache & Queue
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - ehr-network
+
+  # MongoDB (for flexible document storage)
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ehr
+      MONGO_INITDB_ROOT_PASSWORD: ehr
+      MONGO_INITDB_DATABASE: ehr_dev
+    networks:
+      - ehr-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  mongo_data:
+
+networks:
+  ehr-network:
+    driver: bridge
