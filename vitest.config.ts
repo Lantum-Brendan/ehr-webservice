@@ -37,6 +37,7 @@ export default defineConfig({
       "@core": path.resolve(__dirname, "core"),
       "@domains": path.resolve(__dirname, "domains"),
       "@infrastructure": path.resolve(__dirname, "infrastructure"),
+      "@/": path.resolve(__dirname),
     },
   },
 });

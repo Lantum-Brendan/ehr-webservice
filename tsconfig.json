@@ -26,7 +26,8 @@
       "@shared/*": ["shared/*"],
       "@core/*": ["core/*"],
       "@domains/*": ["domains/*"],
-      "@infrastructure/*": ["infrastructure/*"]
+      "@infrastructure/*": ["infrastructure/*"],
+      "@/*": ["./*"]
     }
   },
   "include": ["**/*.ts"],
