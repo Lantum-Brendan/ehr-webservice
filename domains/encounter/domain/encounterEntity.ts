@@ -1,5 +1,4 @@
 import { v4 as uuidv4 } from "uuid";
-import { Patient } from "../../patient/domain/patient.entity";
 
 export class Encounter {
   // Identity - never changes
@@ -112,17 +111,53 @@ export class Encounter {
     );
   }
 
+  /**
+   * Reconstitutes an Encounter from database record
+   * Skips business validation since entity already exists
+   * Preserves the existing ID from the database
+   */
+  static rehydrate(props: {
+    id: string;
+    patientId: string;
+    encounterType: string;
+    startTime: Date | string;
+    endTime?: Date | string | null;
+    status?: string;
+  }): Encounter {
+    const startTime =
+      typeof props.startTime === "string"
+        ? new Date(props.startTime)
+        : props.startTime;
+
+    let endTime: Date | null = null;
+    if (props.endTime !== undefined && props.endTime !== null) {
+      endTime =
+        typeof props.endTime === "string"
+          ? new Date(props.endTime)
+          : props.endTime;
+    }
+
+    return new Encounter(
+      props.id,
+      props.patientId,
+      props.encounterType.trim().toLowerCase(),
+      startTime,
+      endTime,
+      props.status ?? "planned",
+    );
+  }
+
   // Getters
   get encounterTypeValue(): string {
     return this.encounterType;
   }
 
   get startTimeValue(): Date {
-    return new Date(this.startTime);
+    return this.startTime;
   }
 
   get endTimeValue(): Date | null {
-    return this.endTime ? new Date(this.endTime) : null;
+    return this.endTime;
   }
 
   get statusValue(): string {

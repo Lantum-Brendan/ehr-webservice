@@ -12,7 +12,8 @@ export class PrismaPatientRepository implements IPatientRepository {
 
     if (!record) return null;
 
-    return Patient.create({
+    return Patient.rehydrate({
+      id: record.id,
       mrn: record.mrn,
       firstName: record.firstName,
       lastName: record.lastName,
@@ -27,7 +28,8 @@ export class PrismaPatientRepository implements IPatientRepository {
 
     if (!record) return null;
 
-    return Patient.create({
+    return Patient.rehydrate({
+      id: record.id,
       mrn: record.mrn,
       firstName: record.firstName,
       lastName: record.lastName,
@@ -38,7 +40,8 @@ export class PrismaPatientRepository implements IPatientRepository {
   async findAll(): Promise<Patient[]> {
     const records = await prisma.patient.findMany();
     return records.map((record) =>
-      Patient.create({
+      Patient.rehydrate({
+        id: record.id,
         mrn: record.mrn,
         firstName: record.firstName,
         lastName: record.lastName,

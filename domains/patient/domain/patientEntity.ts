@@ -73,6 +73,32 @@ export class Patient {
     );
   }
 
+  /**
+   * Reconstitutes a Patient from database record
+   * Skips business validation since entity already exists
+   * Preserves the existing ID from the database
+   */
+  static rehydrate(props: {
+    id: string;
+    mrn: string;
+    firstName: string;
+    lastName: string;
+    dateOfBirth: Date | string;
+  }): Patient {
+    const birthDate =
+      typeof props.dateOfBirth === "string"
+        ? new Date(props.dateOfBirth)
+        : props.dateOfBirth;
+
+    return new Patient(
+      props.id,
+      props.mrn.toUpperCase(),
+      props.firstName.trim(),
+      props.lastName.trim(),
+      birthDate,
+    );
+  }
+
   // Getters
   get firstNameValue(): string {
     return this.firstName;
@@ -83,7 +109,7 @@ export class Patient {
   }
 
   get dateOfBirthValue(): Date {
-    return new Date(this.dateOfBirth);
+    return this.dateOfBirth;
   }
 
   // Derived properties - business logic lives here

@@ -202,11 +202,11 @@ describe("Patient getters", () => {
     expect(patient.lastNameValue).toBe("Doe");
   });
 
-  it("dateOfBirthValue returns a new Date instance (copy)", () => {
+  it("dateOfBirthValue returns the date of birth", () => {
     const a = patient.dateOfBirthValue;
     const b = patient.dateOfBirthValue;
     expect(a).toEqual(b);
-    expect(a).not.toBe(b); // Different instances
+    expect(a).toBe(b); // Same instance for performance
   });
 
   it("id is a readonly string", () => {

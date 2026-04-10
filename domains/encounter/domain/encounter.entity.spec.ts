@@ -147,12 +147,12 @@ describe("Encounter getters", () => {
     expect(encounter.encounterTypeValue).toBe("outpatient");
   });
 
-  it("startTimeValue returns a new Date instance", () => {
+  it("startTimeValue returns the start time", () => {
     const encounter = Encounter.create(VALID_INPUT);
     const a = encounter.startTimeValue;
     const b = encounter.startTimeValue;
     expect(a).toEqual(b);
-    expect(a).not.toBe(b);
+    expect(a).toBe(b);
   });
 
   it("endTimeValue returns null when no end time set", () => {
