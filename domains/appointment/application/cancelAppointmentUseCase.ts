@@ -7,7 +7,7 @@ import {
   NotFoundError,
   ForbiddenError,
 } from "@core/errors/appError.js";
-import { prisma } from "@infrastructure/database/prisma.client.js";
+import { getAppointmentClinicSettings } from "../infrastructure/appointmentClinicSettings.js";
 
 interface CancelAppointmentInput {
   cancelledBy: string;
@@ -25,13 +25,16 @@ export class CancelAppointmentUseCase {
   async execute(
     id: string,
     input: CancelAppointmentInput,
+    preloadedAppointment?: Appointment,
   ): Promise<Appointment> {
     this.logger.info(
       { appointmentId: id, cancelledBy: input.cancelledBy },
       "Cancelling appointment",
     );
+    const now = new Date();
 
-    const appointment = await this.appointmentRepo.findById(id);
+    const appointment =
+      preloadedAppointment ?? (await this.appointmentRepo.findById(id));
     if (!appointment) {
       this.logger.warn({ appointmentId: id }, "Appointment not found");
       throw new NotFoundError(`Appointment with ID ${id} not found`);
@@ -43,12 +46,12 @@ export class CancelAppointmentUseCase {
       );
     }
 
-    const settings = await prisma.clinicSettings.findFirst();
-    const cutoffHours = settings?.cancellationCutoffHours ?? 24;
+    const settings = await getAppointmentClinicSettings();
+    const cutoffHours = settings.cancellationCutoffHours;
 
     if (input.isPatientCancel) {
       const hoursUntilAppointment =
-        (appointment.scheduledStart.getTime() - Date.now()) / (1000 * 60 * 60);
+        (appointment.scheduledStart.getTime() - now.getTime()) / (1000 * 60 * 60);
 
       if (hoursUntilAppointment < cutoffHours) {
         this.logger.warn(
@@ -61,7 +64,12 @@ export class CancelAppointmentUseCase {
       }
     }
 
-    appointment.cancel(input.cancelledBy, input.reason, input.isPatientCancel);
+    appointment.cancel(
+      input.cancelledBy,
+      input.reason,
+      input.isPatientCancel,
+      now,
+    );
 
     await this.appointmentRepo.save(appointment);
 

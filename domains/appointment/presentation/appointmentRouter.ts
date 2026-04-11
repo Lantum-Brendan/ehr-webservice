@@ -12,6 +12,11 @@ import { Appointment } from "../domain/appointmentEntity.js";
 import { PrismaPatientRepository } from "@domains/patient/infrastructure/prismaPatientRepository.js";
 import { InMemoryEventBus } from "@shared/event-bus/event-bus.interface.js";
 import { logger } from "@shared/logger/index.js";
+import {
+  toAppointmentCancellationDto,
+  toAppointmentDto,
+  toAppointmentListItemDto,
+} from "./appointmentDto.js";
 
 const idSchema = z.string().trim().min(1);
 
@@ -72,27 +77,6 @@ const getAppointmentsForPatientUseCase = new GetAppointmentsForPatientUseCase(
   patientRepo,
 );
 
-function serializeAppointment(appointment: Appointment) {
-  return {
-    id: appointment.id,
-    patientId: appointment.patientId,
-    providerId: appointment.providerId,
-    appointmentTypeId: appointment.appointmentTypeId,
-    durationMinutes: appointment.durationMinutes,
-    locationId: appointment.locationId,
-    scheduledStart: appointment.scheduledStart.toISOString(),
-    scheduledEnd: appointment.scheduledEnd.toISOString(),
-    status: appointment.status,
-    reason: appointment.reason,
-    notes: appointment.notes,
-    createdAt: appointment.createdAt.toISOString(),
-    updatedAt: appointment.updatedAt.toISOString(),
-    cancelledAt: appointment.cancelledAt?.toISOString() ?? null,
-    cancelledBy: appointment.cancelledBy,
-    cancelledReason: appointment.cancelledReason,
-  };
-}
-
 function assertPatientOwnsAppointment(
   userId: string | undefined,
   appointment: Appointment,
@@ -111,7 +95,7 @@ appointmentRouter.post(
     try {
       const input = createAppointmentSchema.parse(req.body);
       const appointment = await createAppointmentUseCase.execute(input);
-      res.status(201).json(serializeAppointment(appointment));
+      res.status(201).json(toAppointmentDto(appointment));
     } catch (error) {
       next(error);
     }
@@ -130,7 +114,7 @@ appointmentRouter.get(
         assertPatientOwnsAppointment(req.user?.id, appointment);
       }
 
-      res.json(serializeAppointment(appointment));
+      res.json(toAppointmentDto(appointment));
     } catch (error) {
       next(error);
     }
@@ -147,7 +131,7 @@ appointmentRouter.put(
         req.params.id,
         input,
       );
-      res.json(serializeAppointment(appointment));
+      res.json(toAppointmentDto(appointment));
     } catch (error) {
       next(error);
     }
@@ -162,10 +146,11 @@ appointmentRouter.put(
       const input = cancelAppointmentSchema.parse(req.body);
       const isPatientCancel = req.user?.roles?.includes("patient") ?? false;
       const cancelledBy = req.user?.id ?? "unknown";
+      let preloadedAppointment: Appointment | undefined;
 
       if (isPatientCancel) {
-        const appointment = await getAppointmentUseCase.execute(req.params.id);
-        assertPatientOwnsAppointment(req.user?.id, appointment);
+        preloadedAppointment = await getAppointmentUseCase.execute(req.params.id);
+        assertPatientOwnsAppointment(req.user?.id, preloadedAppointment);
       }
 
       const appointment = await cancelAppointmentUseCase.execute(
@@ -175,15 +160,10 @@ appointmentRouter.put(
           reason: input.reason,
           isPatientCancel,
         },
+        preloadedAppointment,
       );
 
-      res.json({
-        id: appointment.id,
-        status: appointment.status,
-        cancelledAt: appointment.cancelledAt?.toISOString(),
-        cancelledBy: appointment.cancelledBy,
-        cancelledReason: appointment.cancelledReason,
-      });
+      res.json(toAppointmentCancellationDto(appointment));
     } catch (error) {
       next(error);
     }
@@ -206,16 +186,7 @@ appointmentRouter.get(
       );
 
       res.json({
-        appointments: appointments.map((apt) => ({
-          id: apt.id,
-          providerId: apt.providerId,
-          appointmentTypeId: apt.appointmentTypeId,
-          durationMinutes: apt.durationMinutes,
-          scheduledStart: apt.scheduledStart.toISOString(),
-          scheduledEnd: apt.scheduledEnd.toISOString(),
-          status: apt.status,
-          isCancellable: apt.isCancellable,
-        })),
+        appointments: appointments.map(toAppointmentListItemDto),
       });
     } catch (error) {
       next(error);

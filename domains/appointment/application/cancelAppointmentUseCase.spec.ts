@@ -15,6 +15,9 @@ vi.mock("@infrastructure/database/prisma.client.js", () => ({
 const { prisma } = await import("@infrastructure/database/prisma.client.js");
 const { Appointment } = await import("../domain/appointmentEntity.js");
 const { CancelAppointmentUseCase } = await import("./cancelAppointmentUseCase.js");
+const { resetAppointmentClinicSettingsCache } = await import(
+  "../infrastructure/appointmentClinicSettings.js"
+);
 
 function makeAppointment() {
   return Appointment.rehydrate({
@@ -66,6 +69,7 @@ const mockLogger: Partial<Logger> = {
 describe("CancelAppointmentUseCase", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetAppointmentClinicSettingsCache();
   });
 
   it("stores patient cancellations with the patient-specific status", async () => {

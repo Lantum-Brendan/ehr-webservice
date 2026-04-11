@@ -26,6 +26,9 @@ const { prisma } = await import("@infrastructure/database/prisma.client.js");
 const { Appointment } = await import("../domain/appointmentEntity.js");
 const { CreateAppointmentUseCase } =
   await import("./createAppointmentUseCase.js");
+const { resetAppointmentClinicSettingsCache } = await import(
+  "../infrastructure/appointmentClinicSettings.js"
+);
 
 const mockPatientRepo: Partial<IPatientRepository> = {
   findById: vi.fn(),
@@ -42,6 +45,9 @@ const mockAppointmentRepo: Partial<IAppointmentRepository> = {
   findByDateRange: vi.fn(),
   findByProviderAndDateRange: vi.fn(),
   findOverlappingForProvider: vi.fn(),
+  withSerializableTransaction: vi.fn(async (operation) =>
+    operation(mockAppointmentRepo as IAppointmentRepository),
+  ),
   save: vi.fn(),
   delete: vi.fn(),
 };
@@ -67,6 +73,7 @@ const mockLogger: Partial<Logger> = {
 describe("CreateAppointmentUseCase", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetAppointmentClinicSettingsCache();
   });
 
   it("creates appointment successfully", async () => {

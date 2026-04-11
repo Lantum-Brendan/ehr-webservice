@@ -193,6 +193,7 @@ describe("appointmentRouter ownership guards", () => {
       statusCode: 403,
       message: "Access denied",
     });
+    expect(prisma.appointment.findUnique).toHaveBeenCalledTimes(1);
     expect(prisma.appointment.upsert).not.toHaveBeenCalled();
   });
 });

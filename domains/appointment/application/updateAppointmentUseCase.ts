@@ -2,12 +2,14 @@ import { Appointment } from "../domain/appointmentEntity.js";
 import { IAppointmentRepository } from "../domain/appointmentRepository.js";
 import { IEventBus } from "@shared/event-bus/event-bus.interface.js";
 import { type Logger } from "@shared/logger/index.js";
+import { Prisma } from "@prisma/client";
 import {
   BadRequestError,
   ConflictError,
   NotFoundError,
 } from "@core/errors/appError.js";
 import { prisma } from "@infrastructure/database/prisma.client.js";
+import { getAppointmentClinicSettings } from "../infrastructure/appointmentClinicSettings.js";
 
 interface UpdateAppointmentInput {
   appointmentTypeId?: string;
@@ -30,6 +32,13 @@ function subtractMinutes(date: Date, minutes: number): Date {
   return new Date(date.getTime() - minutes * 60 * 1000);
 }
 
+function isSerializableTransactionConflict(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2034"
+  );
+}
+
 export class UpdateAppointmentUseCase {
   constructor(
     private readonly appointmentRepo: IAppointmentRepository,
@@ -42,6 +51,7 @@ export class UpdateAppointmentUseCase {
     input: UpdateAppointmentInput,
   ): Promise<Appointment> {
     this.logger.info({ appointmentId: id, input }, "Updating appointment");
+    const now = new Date();
 
     const appointment = await this.appointmentRepo.findById(id);
     if (!appointment) {
@@ -121,7 +131,10 @@ export class UpdateAppointmentUseCase {
     }
 
     try {
-      draft.updateDetails(appointmentUpdate);
+      draft.updateDetails({
+        ...appointmentUpdate,
+        now,
+      });
     } catch (error) {
       throw new BadRequestError(getErrorMessage(error));
     }
@@ -131,31 +144,48 @@ export class UpdateAppointmentUseCase {
       input.durationMinutes !== undefined ||
       input.scheduledStart !== undefined;
 
-    if (shouldCheckConflicts) {
-      const settings = await prisma.clinicSettings.findFirst();
-      const bufferMinutes = settings?.appointmentBufferMinutes ?? 0;
+    const settings = shouldCheckConflicts
+      ? await getAppointmentClinicSettings()
+      : null;
 
-      const existingAppointments =
-        await this.appointmentRepo.findOverlappingForProvider(
-          appointment.providerId,
-          subtractMinutes(draft.scheduledStart, bufferMinutes),
-          addMinutes(draft.scheduledEnd, bufferMinutes),
-        );
+    try {
+      await this.appointmentRepo.withSerializableTransaction(async (repo) => {
+        if (shouldCheckConflicts) {
+          const bufferMinutes = settings?.appointmentBufferMinutes ?? 0;
 
-      const hasConflict = existingAppointments.some(
-        (apt) => apt.id !== id && apt.isActive,
-      );
+          const existingAppointments = await repo.findOverlappingForProvider(
+            appointment.providerId,
+            subtractMinutes(draft.scheduledStart, bufferMinutes),
+            addMinutes(draft.scheduledEnd, bufferMinutes),
+          );
 
-      if (hasConflict) {
+          const hasConflict = existingAppointments.some(
+            (apt) => apt.id !== id && apt.isActive,
+          );
+
+          if (hasConflict) {
+            throw new ConflictError(
+              "Time slot is not available. Please choose a different time.",
+            );
+          }
+        }
+
+        appointment.updateDetails({
+          ...appointmentUpdate,
+          now,
+        });
+
+        await repo.save(appointment);
+      });
+    } catch (error) {
+      if (isSerializableTransactionConflict(error)) {
         throw new ConflictError(
-          "Time slot is not available. Please choose a different time.",
+          "Time slot is no longer available. Please choose a different time.",
         );
       }
+
+      throw error;
     }
-
-    appointment.updateDetails(appointmentUpdate);
-
-    await this.appointmentRepo.save(appointment);
 
     await this.eventBus.publish({
       type: "AppointmentUpdated",

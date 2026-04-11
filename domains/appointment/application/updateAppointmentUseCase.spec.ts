@@ -21,6 +21,9 @@ vi.mock("@infrastructure/database/prisma.client.js", () => ({
 const { prisma } = await import("@infrastructure/database/prisma.client.js");
 const { Appointment } = await import("../domain/appointmentEntity.js");
 const { UpdateAppointmentUseCase } = await import("./updateAppointmentUseCase.js");
+const { resetAppointmentClinicSettingsCache } = await import(
+  "../infrastructure/appointmentClinicSettings.js"
+);
 
 const mockAppointment = Appointment.rehydrate({
   id: "appointment-1",
@@ -45,6 +48,9 @@ const mockRepo: Partial<IAppointmentRepository> = {
   findByDateRange: vi.fn(),
   findByProviderAndDateRange: vi.fn(),
   findOverlappingForProvider: vi.fn(),
+  withSerializableTransaction: vi.fn(async (operation) =>
+    operation(mockRepo as IAppointmentRepository),
+  ),
   save: vi.fn(),
   delete: vi.fn(),
 };
@@ -70,6 +76,7 @@ const mockLogger: Partial<Logger> = {
 describe("UpdateAppointmentUseCase", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetAppointmentClinicSettingsCache();
     Object.assign(mockAppointment, Appointment.rehydrate({
       id: "appointment-1",
       patientId: "patient-1",

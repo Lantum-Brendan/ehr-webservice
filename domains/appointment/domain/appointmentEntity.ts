@@ -9,6 +9,10 @@ function normalizeDate(value: Date | string): Date {
   return typeof value === "string" ? new Date(value) : value;
 }
 
+function resolveNow(now?: Date): Date {
+  return now ?? new Date();
+}
+
 export class Appointment {
   public readonly id: string;
   public readonly patientId: string;
@@ -72,6 +76,7 @@ export class Appointment {
     locationId?: string | null;
     scheduledStart: Date | string;
     reason?: string | null;
+    now?: Date;
   }): Appointment {
     if (!props.patientId) {
       throw new Error("Patient ID is required");
@@ -92,7 +97,9 @@ export class Appointment {
       throw new Error("Scheduled start must be a valid date");
     }
 
-    if (scheduledStart < new Date()) {
+    const now = resolveNow(props.now);
+
+    if (scheduledStart < now) {
       throw new Error("Scheduled start cannot be in the past");
     }
 
@@ -112,8 +119,8 @@ export class Appointment {
       AppointmentStatus.SCHEDULED,
       props.reason ?? null,
       null,
-      new Date(),
-      new Date(),
+      now,
+      now,
       null,
       null,
       null,
@@ -246,7 +253,10 @@ export class Appointment {
     scheduledStart?: Date | string;
     reason?: string | null;
     notes?: string | null;
+    now?: Date;
   }): void {
+    const now = resolveNow(props.now);
+
     if (
       props.appointmentTypeId !== undefined &&
       props.appointmentTypeId.trim().length === 0
@@ -285,7 +295,7 @@ export class Appointment {
         throw new Error("Scheduled start must be a valid date");
       }
 
-      if (props.scheduledStart !== undefined && scheduledStart < new Date()) {
+      if (props.scheduledStart !== undefined && scheduledStart < now) {
         throw new Error("Scheduled start cannot be in the past");
       }
 
@@ -301,13 +311,14 @@ export class Appointment {
       );
     }
 
-    this._updatedAt = new Date();
+    this._updatedAt = now;
   }
 
   cancel(
     cancelledBy: string,
     reason?: string,
     cancelledByPatient: boolean = false,
+    now?: Date,
   ): void {
     if (!this.isCancellable) {
       throw new Error(`Cannot cancel appointment with status ${this._status}`);
@@ -315,13 +326,15 @@ export class Appointment {
     if (!cancelledBy) {
       throw new Error("Cancelled by is required");
     }
+    const cancelledAt = resolveNow(now);
+
     this._status = cancelledByPatient
       ? AppointmentStatus.CANCELLED_BY_PATIENT
       : AppointmentStatus.CANCELLED_BY_STAFF;
-    this._cancelledAt = new Date();
+    this._cancelledAt = cancelledAt;
     this._cancelledBy = cancelledBy;
     this._cancelledReason = reason ?? null;
-    this._updatedAt = new Date();
+    this._updatedAt = cancelledAt;
   }
 
   toJSON() {

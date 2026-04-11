@@ -550,4 +550,173 @@ Don't read files top-to-bottom. Start with the entry point (`server.ts` → `app
 
 ---
 
+## Appointment Module Learning Path
+
+Use this order if your goal is to actually understand `domains/appointment/` instead of just recognizing the file names.
+
+### Step 1: Start from the data model, not the router
+
+Read `prisma/schema.prisma` first for `Appointment`, `AppointmentType`, `Location`, `Provider`, and `ClinicSettings`. That tells you what the system can persist before you look at any application logic.
+
+What you must notice:
+- `Appointment` stores both `scheduledStart` and `scheduledEnd`.
+- `status` is stored as a plain `String`, not a Prisma enum.
+- `ClinicSettings` has both `cancellationCutoffHours` and `appointmentBufferMinutes`.
+
+Why this matters: every later question in the module reduces to "where is this field validated, changed, or ignored?"
+
+### Step 2: Read the router to learn the HTTP surface area
+
+Read `domains/appointment/presentation/appointmentRouter.ts` next. Ignore implementation detail on the first pass. Just answer these questions:
+- Which routes exist?
+- Which roles can hit them?
+- What shape of input does each route accept?
+- What shape of output does each route return?
+
+You should come away with this mental map:
+- `POST /` creates an appointment
+- `GET /:id` fetches one appointment
+- `PUT /:id` updates an appointment
+- `PUT /:id/cancel` cancels an appointment
+- `GET /patient/:patientId` lists appointments for one patient
+
+Important context: `app.ts` does not mount `appointmentRouter` yet, so this module is implemented locally but not currently wired into `/api/v1`.
+
+### Step 3: Read the entity as the business rule boundary
+
+Now read `domains/appointment/domain/appointmentEntity.ts` and `domains/appointment/domain/appointmentStatus.ts`.
+
+What you must know here:
+- `Appointment.create(...)` is the factory for new appointments.
+- `Appointment.rehydrate(...)` rebuilds an entity from database state.
+- `isCancellable` and `isActive` are derived from the status enum.
+- The entity currently owns only a few mutations: `assignLocation`, `updateStatus`, and `cancel`.
+
+This is the core DDD lesson in this module: the entity is supposed to be the safest place for invariant enforcement. If the entity does not expose a mutation, the use case will either be forced to reconstruct the object or silently skip the update.
+
+### Step 4: Read the use cases as orchestration, not as business ownership
+
+Then read the files in `domains/appointment/application/` in this order:
+1. `createAppointmentUseCase.ts`
+2. `cancelAppointmentUseCase.ts`
+3. `updateAppointmentUseCase.ts`
+4. `getAppointmentUseCase.ts`
+5. `getAppointmentsForPatientUseCase.ts`
+
+Questions to answer while reading:
+- What does the use case load first?
+- Which checks are delegated to the entity and which are done inline?
+- Which cross-domain dependencies exist?
+- What is persisted?
+- Which event is emitted after the write?
+
+What you should notice:
+- Create checks patient existence and appointment type, computes duration, checks provider conflicts, creates the entity, saves it, then publishes an event.
+- Cancel checks cancellability and patient cutoff policy, mutates the entity, saves it, then publishes an event.
+- Update currently validates conflict conditions but only persists notes.
+- Query use cases are thin and mostly repository pass-throughs.
+
+### Step 5: Read the repository last
+
+Read `domains/appointment/infrastructure/prismaAppointmentRepository.ts` after the entity and use cases.
+
+Why last: repository code makes more sense once you already know the domain object shape.
+
+What you must understand:
+- The repository is responsible for mapping Prisma records into `Appointment.rehydrate(...)`.
+- `save()` is implemented as an upsert.
+- Query methods here control what data is even available for scheduling conflict checks.
+
+This is where you learn the difference between:
+- domain logic: "two appointments must not overlap"
+- persistence/query logic: "which rows do I fetch so I can evaluate overlap correctly?"
+
+### Step 6: Tie in the cross-cutting concerns
+
+At this point, connect the module to the rest of the system:
+- `core/guards/roleGuard.ts` for role-based authorization
+- `shared/event-bus/event-bus.interface.ts` for post-write events
+- `shared/logger/index.ts` for logging
+- `core/errors/appError.ts` for operational errors
+
+If you skip these files, the appointment module can look simpler than it really is. In practice, these cross-cutting concerns shape runtime behavior as much as the use cases do.
+
+### Appointment-specific things you should actively study
+
+These are the concepts that matter most for understanding or extending this module safely.
+
+#### 1. Interval overlap logic
+
+Scheduling code is never really about "same start time." It is about interval overlap: `[startA, endA)` vs `[startB, endB)`.
+
+You should be able to reason about:
+- exact overlap detection
+- false positives caused by oversized search windows
+- false negatives caused by fetching only rows whose `scheduledStart` is inside a window
+- how clinic buffer time changes the interval math
+
+#### 2. State modeling for appointment lifecycle
+
+The status enum is a small state machine. Learn how to think in terms of allowed transitions:
+- `SCHEDULED -> CONFIRMED`
+- `CONFIRMED -> CHECKED_IN`
+- `CHECKED_IN -> IN_PROGRESS`
+- `IN_PROGRESS -> COMPLETED`
+- `SCHEDULED/CONFIRMED -> CANCELLED_*`
+
+If the state transitions are not explicit, business rules leak into routers and use cases.
+
+#### 3. Ownership authorization vs role authorization
+
+This module already distinguishes patient users from staff users in one route. That is a clue that role checks alone are not enough. In healthcare APIs, "patient" usually means "patient accessing their own data," not "patient accessing any record."
+
+You should know the difference between:
+- RBAC: "does this user have the patient role?"
+- resource ownership: "does this appointment belong to this patient?"
+- policy enforcement point: router vs use case vs shared policy layer
+
+#### 4. Entity mutation design
+
+The update use case exposes a classic DDD smell: the input allows many changes, but the entity exposes almost no update methods.
+
+Study how to model safe mutations like:
+- reschedule
+- change reason
+- attach notes
+- assign or change location
+- change appointment type and derived duration
+
+When the entity lacks those methods, application code becomes inconsistent very quickly.
+
+#### 5. Dependency wiring and module composition
+
+The router currently uses type assertions like `{}` as `IPatientRepository` and `{}` as `IEventBus`. That is not real dependency injection. It is a placeholder that compiles but fails at runtime once those methods are called.
+
+You should understand:
+- constructor injection
+- why interface-based dependencies exist here
+- where module composition should happen
+- why "fake it with `as Interface`" is dangerous in TypeScript
+
+### Current review notes for this module
+
+These are the gaps worth revisiting after you understand the happy path:
+- Dependency wiring is incomplete in `appointmentRouter.ts`; most write flows will fail at runtime because repositories and the event bus are placeholder objects.
+- `updateAppointmentUseCase.ts` only persists `notes`; the other allowed update fields are validated but ignored.
+- `GET /:id` and `PUT /:id/cancel` need ownership checks for patient users, not only role checks.
+- Conflict detection currently mixes interval logic with a `scheduledStart` window query, which can both over-report and miss conflicts.
+- Patient-initiated cancellation is tracked in the event payload, but `Appointment.cancel()` always stores `CANCELLED_BY_STAFF`, so the persisted state loses that distinction.
+- No appointment-specific tests are present yet, so the scheduling and authorization rules are not protected by regression tests.
+
+### Further reading queue for this module
+
+Read up on these before extending appointments further:
+- SQL/Prisma interval overlap queries and exclusion constraints
+- RBAC vs ABAC vs ownership checks for REST APIs
+- DDD aggregate mutation methods and invariants
+- Domain events plus the outbox pattern
+- Transaction boundaries and race conditions in scheduling systems
+- Prisma enums vs free-form string columns for business state
+- API test design for scheduling, authorization, and cancellation policies
+
 _This is a living document. Every technical decision we make gets an entry here. Six months from now, when someone asks "why did we do it this way?" — the answer is in this file._
