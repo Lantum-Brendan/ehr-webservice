@@ -22,6 +22,7 @@ const ROLES = new Set([
   "admin",
   "billing",
   "researcher",
+  "reception",
 ]);
 
 /**
