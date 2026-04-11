@@ -26,6 +26,7 @@ model Patient {
   encounters Encounter[]
   clinicalNotes ClinicalNote[]
   billingRecords BillingRecord[]
+  appointments Appointment[]
 
   @@map("patients")
 }
@@ -64,6 +65,84 @@ model BillingRecord {
   createdAt  DateTime @default(now())
 
   @@map("billing_records")
+}
+
+// ========================================
+// Appointment Module Models
+// ========================================
+
+model Provider {
+  id             String   @id @default(uuid())
+  name           String
+  specialization String?
+  isActive       Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  
+  appointments  Appointment[]
+  
+  @@map("providers")
+}
+
+model Location {
+  id          String   @id @default(uuid())
+  name        String
+  type        String   // "exam_room", "lab", "waiting"
+  facilityId  String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  
+  appointments Appointment[]
+  
+  @@map("locations")
+}
+
+model AppointmentType {
+  id                    String   @id @default(uuid())
+  name                  String
+  defaultDurationMinutes Int      @default(15)
+  color                 String?
+  isActive               Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  
+  appointments Appointment[]
+  
+  @@map("appointment_types")
+}
+
+model Appointment {
+  id                 String   @id @default(uuid())
+  patientId          String
+  patient            Patient  @relation(fields: [patientId], references: [id])
+  providerId        String
+  provider          Provider @relation(fields: [providerId], references: [id])
+  locationId        String?
+  location          Location? @relation(fields: [locationId], references: [id])
+  appointmentTypeId String
+  appointmentType   AppointmentType @relation(fields: [appointmentTypeId], references: [id])
+  durationMinutes  Int
+  scheduledStart   DateTime
+  scheduledEnd    DateTime
+  status          String   @default("SCHEDULED")
+  reason          String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  cancelledAt    DateTime?
+  cancelledBy    String?
+  cancelledReason String?
+  
+  @@map("appointments")
+}
+
+model ClinicSettings {
+  id                      String   @id @default(uuid())
+  cancellationCutoffHours   Int      @default(24)
+  clinicName              String   @default("Default Clinic")
+  appointmentBufferMinutes Int      @default(0)   // buffer time between appointments
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@map("clinic_settings")
 }
 
 // Add more models based on your FHIR requirements
