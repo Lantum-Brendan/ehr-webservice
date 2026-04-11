@@ -53,8 +53,8 @@ export class UpdateAppointmentUseCase {
     this.logger.info({ appointmentId: id, input }, "Updating appointment");
     const now = new Date();
 
-    const appointment = await this.appointmentRepo.findById(id);
-    if (!appointment) {
+    const currentAppointment = await this.appointmentRepo.findById(id);
+    if (!currentAppointment) {
       this.logger.warn({ appointmentId: id }, "Appointment not found");
       throw new NotFoundError(`Appointment with ID ${id} not found`);
     }
@@ -66,17 +66,18 @@ export class UpdateAppointmentUseCase {
       input.scheduledStart !== undefined ||
       input.reason !== undefined;
 
-    if (!appointment.isActive) {
+    if (!currentAppointment.isActive) {
       throw new ConflictError("Cannot update appointment that is not active");
     }
 
-    if (hasScheduleChanges && !appointment.isCancellable) {
+    if (hasScheduleChanges && !currentAppointment.isCancellable) {
       throw new ConflictError(
         "Only scheduled or confirmed appointments can be rescheduled or modified",
       );
     }
 
-    let resolvedDuration = input.durationMinutes ?? appointment.durationMinutes;
+    let resolvedDuration =
+      input.durationMinutes ?? currentAppointment.durationMinutes;
 
     if (input.appointmentTypeId !== undefined) {
       const typeRecord = await prisma.appointmentType.findUnique({
@@ -104,7 +105,7 @@ export class UpdateAppointmentUseCase {
       }
     }
 
-    const draft = Appointment.rehydrate(appointment.toJSON());
+    const draft = Appointment.rehydrate(currentAppointment.toJSON());
     const appointmentUpdate: Parameters<Appointment["updateDetails"]>[0] = {};
 
     if (input.appointmentTypeId !== undefined) {
@@ -154,7 +155,7 @@ export class UpdateAppointmentUseCase {
           const bufferMinutes = settings?.appointmentBufferMinutes ?? 0;
 
           const existingAppointments = await repo.findOverlappingForProvider(
-            appointment.providerId,
+            currentAppointment.providerId,
             subtractMinutes(draft.scheduledStart, bufferMinutes),
             addMinutes(draft.scheduledEnd, bufferMinutes),
           );
@@ -170,12 +171,7 @@ export class UpdateAppointmentUseCase {
           }
         }
 
-        appointment.updateDetails({
-          ...appointmentUpdate,
-          now,
-        });
-
-        await repo.save(appointment);
+        await repo.save(draft);
       });
     } catch (error) {
       if (isSerializableTransactionConflict(error)) {
@@ -189,27 +185,27 @@ export class UpdateAppointmentUseCase {
 
     await this.eventBus.publish({
       type: "AppointmentUpdated",
-      aggregateId: appointment.id,
+      aggregateId: draft.id,
       aggregateType: "Appointment",
       occurredOn: new Date(),
       payload: {
-        appointmentId: appointment.id,
+        appointmentId: draft.id,
         updates: input,
-        scheduledStart: appointment.scheduledStart.toISOString(),
-        scheduledEnd: appointment.scheduledEnd.toISOString(),
-        durationMinutes: appointment.durationMinutes,
-        appointmentTypeId: appointment.appointmentTypeId,
-        locationId: appointment.locationId,
-        reason: appointment.reason,
-        notes: appointment.notes,
+        scheduledStart: draft.scheduledStart.toISOString(),
+        scheduledEnd: draft.scheduledEnd.toISOString(),
+        durationMinutes: draft.durationMinutes,
+        appointmentTypeId: draft.appointmentTypeId,
+        locationId: draft.locationId,
+        reason: draft.reason,
+        notes: draft.notes,
       },
     });
 
     this.logger.info(
-      { appointmentId: appointment.id },
+      { appointmentId: draft.id },
       "Appointment updated successfully",
     );
 
-    return appointment;
+    return draft;
   }
 }

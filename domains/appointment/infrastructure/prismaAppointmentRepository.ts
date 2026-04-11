@@ -156,21 +156,21 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
   }
 
   async save(appointment: Appointment): Promise<void> {
-    const data = appointment.toJSON();
-
     await this.db.appointment.upsert({
       where: { id: appointment.id },
       update: {
-        locationId: data.locationId,
-        scheduledStart: data.scheduledStart,
-        scheduledEnd: data.scheduledEnd,
-        status: data.status,
-        reason: data.reason,
-        notes: data.notes,
-        cancelledAt: data.cancelledAt,
-        cancelledBy: data.cancelledBy,
-        cancelledReason: data.cancelledReason,
-        updatedAt: new Date(),
+        appointmentTypeId: appointment.appointmentTypeId,
+        durationMinutes: appointment.durationMinutes,
+        locationId: appointment.locationId,
+        scheduledStart: appointment.scheduledStart,
+        scheduledEnd: appointment.scheduledEnd,
+        status: appointment.status,
+        reason: appointment.reason,
+        notes: appointment.notes,
+        cancelledAt: appointment.cancelledAt,
+        cancelledBy: appointment.cancelledBy,
+        cancelledReason: appointment.cancelledReason,
+        updatedAt: appointment.updatedAt,
       },
       create: {
         id: appointment.id,
@@ -178,14 +178,17 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
         providerId: appointment.providerId,
         appointmentTypeId: appointment.appointmentTypeId,
         durationMinutes: appointment.durationMinutes,
-        locationId: data.locationId,
-        scheduledStart: data.scheduledStart,
-        scheduledEnd: data.scheduledEnd,
-        status: data.status,
-        reason: data.reason,
-        notes: data.notes,
-        createdAt: data.createdAt,
-        updatedAt: data.updatedAt,
+        locationId: appointment.locationId,
+        scheduledStart: appointment.scheduledStart,
+        scheduledEnd: appointment.scheduledEnd,
+        status: appointment.status,
+        reason: appointment.reason,
+        notes: appointment.notes,
+        createdAt: appointment.createdAt,
+        updatedAt: appointment.updatedAt,
+        cancelledAt: appointment.cancelledAt,
+        cancelledBy: appointment.cancelledBy,
+        cancelledReason: appointment.cancelledReason,
       },
     });
   }

@@ -153,7 +153,7 @@ describe("UpdateAppointmentUseCase", () => {
       "2099-01-01T11:55:00.000Z",
     );
 
-    expect(mockRepo.save).toHaveBeenCalledWith(mockAppointment);
+    expect(mockRepo.save).toHaveBeenCalledWith(result);
     expect(mockEventBus.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "AppointmentUpdated",
