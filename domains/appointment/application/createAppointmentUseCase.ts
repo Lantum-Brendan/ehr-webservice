@@ -22,6 +22,7 @@ interface CreateAppointmentInput {
   locationId?: string;
   scheduledStart: Date | string;
   reason?: string;
+  isSelfBooking?: boolean;
 }
 
 function addMinutes(date: Date, minutes: number): Date {
@@ -75,6 +76,46 @@ export class CreateAppointmentUseCase {
     }
     if (!typeRecord.isActive) {
       throw new ConflictError("Appointment type is not available");
+    }
+
+    const selfBookingSettings = await prisma.clinicSettings.findFirst();
+    const isSelfBooking = input.isSelfBooking ?? false;
+
+    if (isSelfBooking) {
+      if (!selfBookingSettings?.patientSelfBookingEnabled) {
+        throw new ConflictError(
+          "Patient self-booking is not currently enabled",
+        );
+      }
+
+      if (!typeRecord.selfBookingEnabled) {
+        throw new ConflictError(
+          "This appointment type cannot be booked by patients",
+        );
+      }
+
+      if (!providerRecord.selfBookingEnabled) {
+        throw new ConflictError(
+          "This provider does not accept patient self-booking",
+        );
+      }
+
+      const maxAdvanceDays = selfBookingSettings.maxAdvanceBookingDays ?? 30;
+      const now = new Date();
+      const maxDate = new Date(
+        now.getTime() + maxAdvanceDays * 24 * 60 * 60 * 1000,
+      );
+
+      const scheduledStartDate = new Date(input.scheduledStart);
+      if (scheduledStartDate < now) {
+        throw new ConflictError("Cannot book appointments in the past");
+      }
+
+      if (scheduledStartDate > maxDate) {
+        throw new ConflictError(
+          `Appointments can only be booked ${maxAdvanceDays} days in advance`,
+        );
+      }
     }
 
     if (input.locationId) {
@@ -155,8 +196,8 @@ export class CreateAppointmentUseCase {
       );
     }
 
-    const settings = await prisma.clinicSettings.findFirst();
-    const bufferMinutes = settings?.appointmentBufferMinutes ?? 0;
+    const bufferSettings = await prisma.clinicSettings.findFirst();
+    const bufferMinutes = bufferSettings?.appointmentBufferMinutes ?? 0;
 
     const existingAppointments =
       await this.appointmentRepo.findOverlappingForProvider(

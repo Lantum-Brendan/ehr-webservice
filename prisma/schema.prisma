@@ -76,6 +76,7 @@ model Provider {
   name           String
   specialization String?
   isActive       Boolean  @default(true)
+  selfBookingEnabled Boolean @default(false)  // patients can book this provider
   createdAt     DateTime @default(now())
   
   appointments  Appointment[]
@@ -104,6 +105,7 @@ model AppointmentType {
   defaultDurationMinutes Int      @default(15)
   color                 String?
   isActive               Boolean  @default(true)
+  selfBookingEnabled    Boolean  @default(false)  // patients can self-book this type
   createdAt             DateTime @default(now())
   
   appointments Appointment[]
@@ -168,6 +170,8 @@ model ClinicSettings {
   cancellationCutoffHours   Int      @default(24)
   clinicName              String   @default("Default Clinic")
   appointmentBufferMinutes Int      @default(0)   // buffer time between appointments
+  patientSelfBookingEnabled Boolean  @default(false)  // allow patients to book
+  maxAdvanceBookingDays    Int      @default(30)    // how far in advance patients can book
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   

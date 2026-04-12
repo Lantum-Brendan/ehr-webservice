@@ -56,6 +56,15 @@ const availableSlotsSchema = z.object({
   durationMinutes: z.coerce.number().positive().optional(),
 });
 
+const selfBookAppointmentSchema = z.object({
+  providerId: idSchema,
+  appointmentTypeId: idSchema,
+  durationMinutes: z.number().positive().optional(),
+  locationId: idSchema.optional(),
+  scheduledStart: z.string().datetime(),
+  reason: z.string().optional(),
+});
+
 const appointmentRepo = new PrismaAppointmentRepository();
 const patientRepo = new PrismaPatientRepository();
 const eventBus = new InMemoryEventBus();
@@ -146,6 +155,31 @@ appointmentRouter.get(
           end: slot.end.toISOString(),
         })),
       });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+appointmentRouter.post(
+  "/self-book",
+  requireRole("patient"),
+  async (req, res, next) => {
+    try {
+      const input = selfBookAppointmentSchema.parse(req.body);
+      const patientId = req.user?.id;
+
+      if (!patientId) {
+        throw new ForbiddenError("Patient ID not found in token");
+      }
+
+      const appointment = await createAppointmentUseCase.execute({
+        ...input,
+        patientId,
+        isSelfBooking: true,
+      });
+
+      res.status(201).json(toAppointmentDto(appointment));
     } catch (error) {
       next(error);
     }
