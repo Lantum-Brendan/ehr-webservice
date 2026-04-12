@@ -12,6 +12,7 @@ import {
   NotFoundError,
 } from "@core/errors/appError.js";
 import { prisma } from "@infrastructure/database/prisma.client.js";
+import { Prisma } from "@prisma/client";
 
 interface UpdateAppointmentInput {
   appointmentTypeId?: string;
@@ -32,6 +33,13 @@ function subtractMinutes(date: Date, minutes: number): Date {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Invalid appointment update";
+}
+
+function isSerializableTransactionConflict(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2034"
+  );
 }
 
 export class UpdateAppointmentUseCase {
@@ -154,19 +162,11 @@ export class UpdateAppointmentUseCase {
         );
       }
 
-      const workingHours = activeSchedules[0].getWorkingHoursForDate(
-        draft.scheduledStart,
+      const isWithinWorkingHours = activeSchedules.some((schedule) =>
+        schedule.coversInterval(draft.scheduledStart, draft.scheduledEnd),
       );
-      if (!workingHours) {
-        throw new ConflictError(
-          "Provider is not available at this time. Please choose a different time.",
-        );
-      }
 
-      if (
-        draft.scheduledStart < workingHours.start ||
-        draft.scheduledEnd > workingHours.end
-      ) {
+      if (!isWithinWorkingHours) {
         throw new ConflictError(
           "Appointment falls outside provider's working hours.",
         );
@@ -191,27 +191,43 @@ export class UpdateAppointmentUseCase {
       const settings = await prisma.clinicSettings.findFirst();
       const bufferMinutes = settings?.appointmentBufferMinutes ?? 0;
 
-      const existingAppointments =
-        await this.appointmentRepo.findOverlappingForProvider(
-          currentAppointment.providerId,
-          subtractMinutes(draft.scheduledStart, bufferMinutes),
-          addMinutes(draft.scheduledEnd, bufferMinutes),
-        );
+      try {
+        await this.appointmentRepo.withSerializableTransaction(async (repo) => {
+          const existingAppointments = await repo.findOverlappingForProvider(
+            currentAppointment.providerId,
+            subtractMinutes(draft.scheduledStart, bufferMinutes),
+            addMinutes(draft.scheduledEnd, bufferMinutes),
+          );
 
-      const hasConflict = existingAppointments.some(
-        (apt) => apt.id !== id && apt.isActive,
-      );
+          const hasConflict = existingAppointments.some(
+            (apt) => apt.id !== id && apt.isActive,
+          );
 
-      if (hasConflict) {
-        throw new ConflictError(
-          "Time slot is not available. Please choose a different time.",
-        );
+          if (hasConflict) {
+            throw new ConflictError(
+              "Time slot is not available. Please choose a different time.",
+            );
+          }
+
+          await repo.save(draft);
+        });
+      } catch (error) {
+        if (isSerializableTransactionConflict(error)) {
+          throw new ConflictError(
+            "Time slot is no longer available. Please choose a different time.",
+          );
+        }
+
+        throw error;
       }
+    } else {
+      await this.appointmentRepo.save(draft);
     }
 
-    currentAppointment.updateDetails(appointmentUpdate);
-
-    await this.appointmentRepo.save(currentAppointment);
+    currentAppointment.updateDetails({
+      ...appointmentUpdate,
+      now: draft.updatedAt,
+    });
 
     await this.eventBus.publish({
       type: "AppointmentUpdated",

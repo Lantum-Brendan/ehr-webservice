@@ -6,7 +6,7 @@ export class PrismaProviderScheduleRepository implements IProviderScheduleReposi
   async findByProviderId(providerId: string): Promise<ProviderSchedule[]> {
     const records = await prisma.providerSchedule.findMany({
       where: { providerId },
-      orderBy: { dayOfWeek: "asc" },
+      orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
     });
 
     return records.map((record) =>
@@ -27,6 +27,7 @@ export class PrismaProviderScheduleRepository implements IProviderScheduleReposi
   ): Promise<ProviderSchedule[]> {
     const records = await prisma.providerSchedule.findMany({
       where: { providerId, dayOfWeek },
+      orderBy: { startTime: "asc" },
     });
 
     return records.map((record) =>

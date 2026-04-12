@@ -1,9 +1,18 @@
 import { Appointment } from "../domain/appointmentEntity.js";
 import { IAppointmentRepository } from "../domain/appointmentRepository.js";
 import { prisma } from "@infrastructure/database/prisma.client.js";
+import { Prisma, PrismaClient } from "@prisma/client";
+
+type AppointmentDbClient = PrismaClient | Prisma.TransactionClient;
 
 export class PrismaAppointmentRepository implements IAppointmentRepository {
-  private mapToAppointment(record: any): Appointment | null {
+  constructor(private readonly db: AppointmentDbClient = prisma) {}
+
+  private mapToAppointment(
+    record: Awaited<
+      ReturnType<AppointmentDbClient["appointment"]["findUnique"]>
+    >,
+  ): Appointment | null {
     if (!record) {
       return null;
     }
@@ -28,8 +37,14 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
     });
   }
 
+  private isRootClient(): this is {
+    db: PrismaClient;
+  } {
+    return "$transaction" in this.db;
+  }
+
   async findById(id: string): Promise<Appointment | null> {
-    const record = await prisma.appointment.findUnique({
+    const record = await this.db.appointment.findUnique({
       where: { id },
     });
 
@@ -37,7 +52,7 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
   }
 
   async findByPatientId(patientId: string): Promise<Appointment[]> {
-    const records = await prisma.appointment.findMany({
+    const records = await this.db.appointment.findMany({
       where: { patientId },
       orderBy: { scheduledStart: "asc" },
     });
@@ -48,7 +63,7 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
   }
 
   async findByProviderId(providerId: string): Promise<Appointment[]> {
-    const records = await prisma.appointment.findMany({
+    const records = await this.db.appointment.findMany({
       where: { providerId },
       orderBy: { scheduledStart: "asc" },
     });
@@ -62,7 +77,7 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
     startDate: Date,
     endDate: Date,
   ): Promise<Appointment[]> {
-    const records = await prisma.appointment.findMany({
+    const records = await this.db.appointment.findMany({
       where: {
         scheduledStart: {
           gte: startDate,
@@ -82,7 +97,7 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
     startDate: Date,
     endDate: Date,
   ): Promise<Appointment[]> {
-    const records = await prisma.appointment.findMany({
+    const records = await this.db.appointment.findMany({
       where: {
         providerId,
         scheduledStart: {
@@ -103,7 +118,7 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
     startDate: Date,
     endDate: Date,
   ): Promise<Appointment[]> {
-    const records = await prisma.appointment.findMany({
+    const records = await this.db.appointment.findMany({
       where: {
         providerId,
         scheduledStart: { lt: endDate },
@@ -117,12 +132,45 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
       .filter(Boolean) as Appointment[];
   }
 
+  async withSerializableTransaction<T>(
+    operation: (repository: IAppointmentRepository) => Promise<T>,
+  ): Promise<T> {
+    if (!this.isRootClient()) {
+      return operation(this);
+    }
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.db.$transaction(
+          async (tx) => operation(new PrismaAppointmentRepository(tx)),
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          },
+        );
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2034" &&
+          attempt < 2
+        ) {
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    throw new Error("Unreachable transaction retry state");
+  }
+
   async save(appointment: Appointment): Promise<void> {
     const data = appointment.toJSON();
 
-    await prisma.appointment.upsert({
+    await this.db.appointment.upsert({
       where: { id: appointment.id },
       update: {
+        appointmentTypeId: data.appointmentTypeId,
+        durationMinutes: data.durationMinutes,
         locationId: data.locationId,
         scheduledStart: data.scheduledStart,
         scheduledEnd: data.scheduledEnd,
@@ -132,7 +180,7 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
         cancelledAt: data.cancelledAt,
         cancelledBy: data.cancelledBy,
         cancelledReason: data.cancelledReason,
-        updatedAt: new Date(),
+        updatedAt: data.updatedAt,
       },
       create: {
         id: appointment.id,
@@ -153,7 +201,7 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await prisma.appointment.delete({
+    await this.db.appointment.delete({
       where: { id },
     });
   }

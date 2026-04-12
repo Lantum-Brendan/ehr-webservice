@@ -1,12 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { type IAppointmentRepository } from "../domain/appointmentRepository";
+
+import { ConflictError } from "@core/errors/appError.js";
+import { type IEventBus } from "@shared/event-bus/event-bus.interface.js";
+import { type Logger } from "@shared/logger/index.js";
+
+import { Appointment } from "../domain/appointmentEntity.js";
+import type { IAppointmentRepository } from "../domain/appointmentRepository.js";
+import { ProviderSchedule } from "../domain/providerSchedule.js";
+import { ScheduleBlock } from "../domain/scheduleBlock.js";
 import {
   type IProviderScheduleRepository,
   type IScheduleBlockRepository,
-} from "../domain/scheduleRepository";
-import { type IEventBus } from "@shared/event-bus/event-bus.interface";
-import { type Logger } from "@shared/logger/index";
-import { ConflictError } from "@core/errors/appError";
+} from "../domain/scheduleRepository.js";
 
 vi.mock("@infrastructure/database/prisma.client.js", () => ({
   prisma: {
@@ -23,11 +28,10 @@ vi.mock("@infrastructure/database/prisma.client.js", () => ({
 }));
 
 const { prisma } = await import("@infrastructure/database/prisma.client.js");
-const { Appointment } = await import("../domain/appointmentEntity.js");
 const { UpdateAppointmentUseCase } =
   await import("./updateAppointmentUseCase.js");
 
-const mockAppointment = Appointment.rehydrate({
+const baseAppointment = Appointment.rehydrate({
   id: "appointment-1",
   patientId: "patient-1",
   providerId: "provider-1",
@@ -43,28 +47,26 @@ const mockAppointment = Appointment.rehydrate({
   updatedAt: "2098-12-30T10:00:00.000Z",
 });
 
-const mockAppointmentRepo: Partial<IAppointmentRepository> = {
+const mockAppointmentRepo: IAppointmentRepository = {
   findById: vi.fn(),
   findByPatientId: vi.fn(),
   findByProviderId: vi.fn(),
   findByDateRange: vi.fn(),
   findByProviderAndDateRange: vi.fn(),
   findOverlappingForProvider: vi.fn(),
+  withSerializableTransaction: vi.fn(),
   save: vi.fn(),
   delete: vi.fn(),
 };
 
-const mockScheduleRepo: Partial<IProviderScheduleRepository> = {
+const mockScheduleRepo: IProviderScheduleRepository = {
+  findByProviderId: vi.fn(),
   findByProviderAndDay: vi.fn(),
-  findByProviderAndDateRange: vi.fn(),
-  save: vi.fn(),
-  delete: vi.fn(),
 };
 
-const mockBlockRepo: Partial<IScheduleBlockRepository> = {
+const mockBlockRepo: IScheduleBlockRepository = {
+  findByProviderId: vi.fn(),
   findByProviderAndDateRange: vi.fn(),
-  save: vi.fn(),
-  delete: vi.fn(),
 };
 
 const mockEventBus: Partial<IEventBus> = {
@@ -85,31 +87,36 @@ const mockLogger: Partial<Logger> = {
   child: vi.fn(() => mockLogger as Logger),
 };
 
+function makeAppointment() {
+  return Appointment.rehydrate(baseAppointment.toJSON());
+}
+
+function makeThursdaySchedule(startTime: string, endTime: string) {
+  return ProviderSchedule.create({
+    providerId: "provider-1",
+    dayOfWeek: 4,
+    startTime,
+    endTime,
+  });
+}
+
 describe("UpdateAppointmentUseCase", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (
+      mockAppointmentRepo.withSerializableTransaction as ReturnType<
+        typeof vi.fn
+      >
+    ).mockImplementation(async (operation) => operation(mockAppointmentRepo));
   });
 
-  it("persists schedule and metadata updates with an overlap-aware query", async () => {
+  it("persists schedule and metadata updates through the transaction path", async () => {
     (
       mockAppointmentRepo.findById as ReturnType<typeof vi.fn>
-    ).mockResolvedValue(mockAppointment);
+    ).mockResolvedValue(makeAppointment());
     (
       mockScheduleRepo.findByProviderAndDay as ReturnType<typeof vi.fn>
-    ).mockResolvedValue([
-      {
-        id: "schedule-1",
-        providerId: "provider-1",
-        dayOfWeek: 1,
-        startTime: "09:00",
-        endTime: "17:00",
-        isActive: true,
-        getWorkingHoursForDate: () => ({
-          start: new Date("2099-01-01T09:00:00.000Z"),
-          end: new Date("2099-01-01T17:00:00.000Z"),
-        }),
-      },
-    ]);
+    ).mockResolvedValue([makeThursdaySchedule("09:00", "17:00")]);
     (
       mockBlockRepo.findByProviderAndDateRange as ReturnType<typeof vi.fn>
     ).mockResolvedValue([]);
@@ -134,9 +141,9 @@ describe("UpdateAppointmentUseCase", () => {
     });
 
     const useCase = new UpdateAppointmentUseCase(
-      mockAppointmentRepo as IAppointmentRepository,
-      mockScheduleRepo as IProviderScheduleRepository,
-      mockBlockRepo as IScheduleBlockRepository,
+      mockAppointmentRepo,
+      mockScheduleRepo,
+      mockBlockRepo,
       mockEventBus as IEventBus,
       mockLogger as Logger,
     );
@@ -160,8 +167,12 @@ describe("UpdateAppointmentUseCase", () => {
     expect(result.scheduledEnd.toISOString()).toBe("2099-01-01T11:45:00.000Z");
 
     expect(
+      mockAppointmentRepo.withSerializableTransaction,
+    ).toHaveBeenCalledTimes(1);
+    expect(
       mockAppointmentRepo.findOverlappingForProvider,
     ).toHaveBeenCalledTimes(1);
+
     const [providerId, windowStart, windowEnd] = (
       mockAppointmentRepo.findOverlappingForProvider as ReturnType<typeof vi.fn>
     ).mock.calls[0];
@@ -171,7 +182,11 @@ describe("UpdateAppointmentUseCase", () => {
     );
     expect((windowEnd as Date).toISOString()).toBe("2099-01-01T11:55:00.000Z");
 
-    expect(mockAppointmentRepo.save).toHaveBeenCalledWith(result);
+    const savedAppointment = (
+      mockAppointmentRepo.save as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0] as Appointment;
+    expect(savedAppointment.toJSON()).toEqual(result.toJSON());
+
     expect(mockEventBus.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "AppointmentUpdated",
@@ -187,26 +202,93 @@ describe("UpdateAppointmentUseCase", () => {
     );
   });
 
-  it("rejects conflicting schedule changes", async () => {
+  it("accepts rescheduling into a later split-shift window", async () => {
     (
       mockAppointmentRepo.findById as ReturnType<typeof vi.fn>
-    ).mockResolvedValue(mockAppointment);
+    ).mockResolvedValue(makeAppointment());
     (
       mockScheduleRepo.findByProviderAndDay as ReturnType<typeof vi.fn>
     ).mockResolvedValue([
-      {
-        id: "schedule-1",
-        providerId: "provider-1",
-        dayOfWeek: 1,
-        startTime: "09:00",
-        endTime: "17:00",
-        isActive: true,
-        getWorkingHoursForDate: () => ({
-          start: new Date("2099-01-01T09:00:00.000Z"),
-          end: new Date("2099-01-01T17:00:00.000Z"),
-        }),
-      },
+      makeThursdaySchedule("09:00", "12:00"),
+      makeThursdaySchedule("14:00", "17:00"),
     ]);
+    (
+      mockBlockRepo.findByProviderAndDateRange as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([]);
+    (
+      mockAppointmentRepo.findOverlappingForProvider as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([]);
+    (
+      prisma.clinicSettings.findFirst as ReturnType<typeof vi.fn>
+    ).mockResolvedValue({
+      appointmentBufferMinutes: 0,
+    });
+
+    const useCase = new UpdateAppointmentUseCase(
+      mockAppointmentRepo,
+      mockScheduleRepo,
+      mockBlockRepo,
+      mockEventBus as IEventBus,
+      mockLogger as Logger,
+    );
+
+    const result = await useCase.execute("appointment-1", {
+      scheduledStart: "2099-01-01T14:30:00.000Z",
+    });
+
+    expect(result.scheduledStart.toISOString()).toBe(
+      "2099-01-01T14:30:00.000Z",
+    );
+    expect(mockAppointmentRepo.save).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects blocked schedule changes before the transaction runs", async () => {
+    (
+      mockAppointmentRepo.findById as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(makeAppointment());
+    (
+      mockScheduleRepo.findByProviderAndDay as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([makeThursdaySchedule("09:00", "17:00")]);
+    (
+      mockBlockRepo.findByProviderAndDateRange as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([
+      ScheduleBlock.create({
+        providerId: "provider-1",
+        startDateTime: "2099-01-01T11:00:00.000Z",
+        endDateTime: "2099-01-01T11:45:00.000Z",
+        reason: "Protected time",
+      }),
+    ]);
+
+    const useCase = new UpdateAppointmentUseCase(
+      mockAppointmentRepo,
+      mockScheduleRepo,
+      mockBlockRepo,
+      mockEventBus as IEventBus,
+      mockLogger as Logger,
+    );
+
+    await expect(
+      useCase.execute("appointment-1", {
+        scheduledStart: "2099-01-01T11:00:00.000Z",
+      }),
+    ).rejects.toThrow(
+      "This time slot is blocked. Please choose a different time.",
+    );
+
+    expect(
+      mockAppointmentRepo.withSerializableTransaction,
+    ).not.toHaveBeenCalled();
+    expect(mockAppointmentRepo.save).not.toHaveBeenCalled();
+  });
+
+  it("rejects conflicting schedule changes", async () => {
+    (
+      mockAppointmentRepo.findById as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(makeAppointment());
+    (
+      mockScheduleRepo.findByProviderAndDay as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([makeThursdaySchedule("09:00", "17:00")]);
     (
       mockBlockRepo.findByProviderAndDateRange as ReturnType<typeof vi.fn>
     ).mockResolvedValue([]);
@@ -236,9 +318,9 @@ describe("UpdateAppointmentUseCase", () => {
     });
 
     const useCase = new UpdateAppointmentUseCase(
-      mockAppointmentRepo as IAppointmentRepository,
-      mockScheduleRepo as IProviderScheduleRepository,
-      mockBlockRepo as IScheduleBlockRepository,
+      mockAppointmentRepo,
+      mockScheduleRepo,
+      mockBlockRepo,
       mockEventBus as IEventBus,
       mockLogger as Logger,
     );
@@ -249,6 +331,9 @@ describe("UpdateAppointmentUseCase", () => {
       }),
     ).rejects.toThrow(ConflictError);
 
+    expect(
+      mockAppointmentRepo.withSerializableTransaction,
+    ).toHaveBeenCalledTimes(1);
     expect(mockAppointmentRepo.save).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,17 @@
 import { v4 as uuidv4 } from "uuid";
 
+const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+
+function parseTime(time: string, label: "Start" | "End") {
+  if (!TIME_PATTERN.test(time)) {
+    throw new Error(`${label} time must be in HH:mm format (00:00-23:59)`);
+  }
+
+  const [hour, minute] = time.split(":").map((part) => parseInt(part, 10));
+
+  return { hour, minute };
+}
+
 export class ProviderSchedule {
   public readonly id: string;
   public readonly providerId: string;
@@ -35,24 +47,14 @@ export class ProviderSchedule {
       throw new Error("Day of week must be 0-6 (Sunday-Saturday)");
     }
 
-    const startParts = props.startTime.split(":");
-    const startHour = parseInt(startParts[0], 10);
-    const startMinute = parseInt(startParts[1], 10);
-    if (
-      startHour < 0 ||
-      startHour > 23 ||
-      startMinute < 0 ||
-      startMinute > 59
-    ) {
-      throw new Error("Start time must be in HH:mm format (00:00-23:59)");
-    }
-
-    const endParts = props.endTime.split(":");
-    const endHour = parseInt(endParts[0], 10);
-    const endMinute = parseInt(endParts[1], 10);
-    if (endHour < 0 || endHour > 23 || endMinute < 0 || endMinute > 59) {
-      throw new Error("End time must be in HH:mm format (00:00-23:59)");
-    }
+    const { hour: startHour, minute: startMinute } = parseTime(
+      props.startTime,
+      "Start",
+    );
+    const { hour: endHour, minute: endMinute } = parseTime(
+      props.endTime,
+      "End",
+    );
 
     const startMinutes = startHour * 60 + startMinute;
     const endMinutes = endHour * 60 + endMinute;
@@ -89,13 +91,13 @@ export class ProviderSchedule {
   }
 
   getStartMinutes(): number {
-    const parts = this.startTime.split(":");
-    return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    const { hour, minute } = parseTime(this.startTime, "Start");
+    return hour * 60 + minute;
   }
 
   getEndMinutes(): number {
-    const parts = this.endTime.split(":");
-    return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    const { hour, minute } = parseTime(this.endTime, "End");
+    return hour * 60 + minute;
   }
 
   isWorkingDay(date: Date): boolean {
@@ -108,13 +110,26 @@ export class ProviderSchedule {
     }
 
     const start = new Date(date);
-    const [startHour, startMinute] = this.startTime.split(":");
-    start.setHours(parseInt(startHour, 10), parseInt(startMinute, 10), 0, 0);
+    const { hour: startHour, minute: startMinute } = parseTime(
+      this.startTime,
+      "Start",
+    );
+    start.setHours(startHour, startMinute, 0, 0);
 
     const end = new Date(date);
-    const [endHour, endMinute] = this.endTime.split(":");
-    end.setHours(parseInt(endHour, 10), parseInt(endMinute, 10), 0, 0);
+    const { hour: endHour, minute: endMinute } = parseTime(this.endTime, "End");
+    end.setHours(endHour, endMinute, 0, 0);
 
     return { start, end };
+  }
+
+  coversInterval(start: Date, end: Date): boolean {
+    const workingHours = this.getWorkingHoursForDate(start);
+
+    if (!workingHours) {
+      return false;
+    }
+
+    return start >= workingHours.start && end <= workingHours.end;
   }
 }
