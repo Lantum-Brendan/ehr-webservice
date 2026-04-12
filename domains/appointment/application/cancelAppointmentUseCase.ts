@@ -7,7 +7,7 @@ import {
   NotFoundError,
   ForbiddenError,
 } from "@core/errors/appError.js";
-import { getAppointmentClinicSettings } from "../infrastructure/appointmentClinicSettings.js";
+import { prisma } from "@infrastructure/database/prisma.client.js";
 
 interface CancelAppointmentInput {
   cancelledBy: string;
@@ -46,12 +46,13 @@ export class CancelAppointmentUseCase {
       );
     }
 
-    const settings = await getAppointmentClinicSettings();
-    const cutoffHours = settings.cancellationCutoffHours;
+    const settings = await prisma.clinicSettings.findFirst();
+    const cutoffHours = settings?.cancellationCutoffHours ?? 24;
 
     if (input.isPatientCancel) {
       const hoursUntilAppointment =
-        (appointment.scheduledStart.getTime() - now.getTime()) / (1000 * 60 * 60);
+        (appointment.scheduledStart.getTime() - now.getTime()) /
+        (1000 * 60 * 60);
 
       if (hoursUntilAppointment < cutoffHours) {
         this.logger.warn(

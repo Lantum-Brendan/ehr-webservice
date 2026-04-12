@@ -79,6 +79,8 @@ model Provider {
   createdAt     DateTime @default(now())
   
   appointments  Appointment[]
+  schedules     ProviderSchedule[]
+  scheduleBlocks ScheduleBlock[]
   
   @@map("providers")
 }
@@ -107,6 +109,33 @@ model AppointmentType {
   appointments Appointment[]
   
   @@map("appointment_types")
+}
+
+// Provider recurring weekly schedule
+model ProviderSchedule {
+  id          String   @id @default(uuid())
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id])
+  dayOfWeek  Int      // 0=Sunday, 1=Monday, ..., 6=Saturday
+  startTime  String   // "08:00" in HH:mm format
+  endTime   String   // "17:00" in HH:mm format
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  
+  @@map("provider_schedules")
+}
+
+// One-off schedule blocks (lunch, vacation, meetings)
+model ScheduleBlock {
+  id           String   @id @default(uuid())
+  providerId  String
+  provider    Provider @relation(fields: [providerId], references: [id])
+  startDateTime DateTime
+  endDateTime DateTime
+  reason      String   // "Lunch", "Annual Leave", "Meeting"
+  createdAt   DateTime @default(now())
+  
+  @@map("schedule_blocks")
 }
 
 model Appointment {

@@ -15,9 +15,6 @@ export interface IAppointmentRepository {
     startDate: Date,
     endDate: Date,
   ): Promise<Appointment[]>;
-  withSerializableTransaction<T>(
-    operation: (repository: IAppointmentRepository) => Promise<T>,
-  ): Promise<T>;
   save(appointment: Appointment): Promise<void>;
   delete(id: string): Promise<void>;
 }

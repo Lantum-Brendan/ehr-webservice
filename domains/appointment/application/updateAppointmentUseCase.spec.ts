@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type IAppointmentRepository } from "../domain/appointmentRepository";
+import {
+  type IProviderScheduleRepository,
+  type IScheduleBlockRepository,
+} from "../domain/scheduleRepository";
 import { type IEventBus } from "@shared/event-bus/event-bus.interface";
 import { type Logger } from "@shared/logger/index";
 import { ConflictError } from "@core/errors/appError";
@@ -20,10 +24,8 @@ vi.mock("@infrastructure/database/prisma.client.js", () => ({
 
 const { prisma } = await import("@infrastructure/database/prisma.client.js");
 const { Appointment } = await import("../domain/appointmentEntity.js");
-const { UpdateAppointmentUseCase } = await import("./updateAppointmentUseCase.js");
-const { resetAppointmentClinicSettingsCache } = await import(
-  "../infrastructure/appointmentClinicSettings.js"
-);
+const { UpdateAppointmentUseCase } =
+  await import("./updateAppointmentUseCase.js");
 
 const mockAppointment = Appointment.rehydrate({
   id: "appointment-1",
@@ -41,16 +43,26 @@ const mockAppointment = Appointment.rehydrate({
   updatedAt: "2098-12-30T10:00:00.000Z",
 });
 
-const mockRepo: Partial<IAppointmentRepository> = {
+const mockAppointmentRepo: Partial<IAppointmentRepository> = {
   findById: vi.fn(),
   findByPatientId: vi.fn(),
   findByProviderId: vi.fn(),
   findByDateRange: vi.fn(),
   findByProviderAndDateRange: vi.fn(),
   findOverlappingForProvider: vi.fn(),
-  withSerializableTransaction: vi.fn(async (operation) =>
-    operation(mockRepo as IAppointmentRepository),
-  ),
+  save: vi.fn(),
+  delete: vi.fn(),
+};
+
+const mockScheduleRepo: Partial<IProviderScheduleRepository> = {
+  findByProviderAndDay: vi.fn(),
+  findByProviderAndDateRange: vi.fn(),
+  save: vi.fn(),
+  delete: vi.fn(),
+};
+
+const mockBlockRepo: Partial<IScheduleBlockRepository> = {
+  findByProviderAndDateRange: vi.fn(),
   save: vi.fn(),
   delete: vi.fn(),
 };
@@ -76,47 +88,55 @@ const mockLogger: Partial<Logger> = {
 describe("UpdateAppointmentUseCase", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    resetAppointmentClinicSettingsCache();
-    Object.assign(mockAppointment, Appointment.rehydrate({
-      id: "appointment-1",
-      patientId: "patient-1",
-      providerId: "provider-1",
-      appointmentTypeId: "type-old",
-      durationMinutes: 30,
-      locationId: "location-old",
-      scheduledStart: "2099-01-01T10:00:00.000Z",
-      scheduledEnd: "2099-01-01T10:30:00.000Z",
-      status: "SCHEDULED",
-      reason: "Initial reason",
-      notes: "Initial notes",
-      createdAt: "2098-12-30T10:00:00.000Z",
-      updatedAt: "2098-12-30T10:00:00.000Z",
-    }));
   });
 
   it("persists schedule and metadata updates with an overlap-aware query", async () => {
-    (mockRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
-      mockAppointment,
-    );
-    (mockRepo.findOverlappingForProvider as ReturnType<typeof vi.fn>)
-      .mockResolvedValue([]);
-    (prisma.appointmentType.findUnique as ReturnType<typeof vi.fn>)
-      .mockResolvedValue({
-        id: "type-new",
+    (
+      mockAppointmentRepo.findById as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(mockAppointment);
+    (
+      mockScheduleRepo.findByProviderAndDay as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([
+      {
+        id: "schedule-1",
+        providerId: "provider-1",
+        dayOfWeek: 1,
+        startTime: "09:00",
+        endTime: "17:00",
         isActive: true,
-        defaultDurationMinutes: 45,
-      });
+        getWorkingHoursForDate: () => ({
+          start: new Date("2099-01-01T09:00:00.000Z"),
+          end: new Date("2099-01-01T17:00:00.000Z"),
+        }),
+      },
+    ]);
+    (
+      mockBlockRepo.findByProviderAndDateRange as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([]);
+    (
+      mockAppointmentRepo.findOverlappingForProvider as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([]);
+    (
+      prisma.appointmentType.findUnique as ReturnType<typeof vi.fn>
+    ).mockResolvedValue({
+      id: "type-new",
+      isActive: true,
+      defaultDurationMinutes: 45,
+    });
     (prisma.location.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "location-new",
       isActive: true,
     });
-    (prisma.clinicSettings.findFirst as ReturnType<typeof vi.fn>)
-      .mockResolvedValue({
-        appointmentBufferMinutes: 10,
-      });
+    (
+      prisma.clinicSettings.findFirst as ReturnType<typeof vi.fn>
+    ).mockResolvedValue({
+      appointmentBufferMinutes: 10,
+    });
 
     const useCase = new UpdateAppointmentUseCase(
-      mockRepo as IAppointmentRepository,
+      mockAppointmentRepo as IAppointmentRepository,
+      mockScheduleRepo as IProviderScheduleRepository,
+      mockBlockRepo as IScheduleBlockRepository,
       mockEventBus as IEventBus,
       mockLogger as Logger,
     );
@@ -137,23 +157,21 @@ describe("UpdateAppointmentUseCase", () => {
     expect(result.scheduledStart.toISOString()).toBe(
       "2099-01-01T11:00:00.000Z",
     );
-    expect(result.scheduledEnd.toISOString()).toBe(
-      "2099-01-01T11:45:00.000Z",
-    );
+    expect(result.scheduledEnd.toISOString()).toBe("2099-01-01T11:45:00.000Z");
 
-    expect(mockRepo.findOverlappingForProvider).toHaveBeenCalledTimes(1);
-    const [providerId, windowStart, windowEnd] =
-      (mockRepo.findOverlappingForProvider as ReturnType<typeof vi.fn>)
-        .mock.calls[0];
+    expect(
+      mockAppointmentRepo.findOverlappingForProvider,
+    ).toHaveBeenCalledTimes(1);
+    const [providerId, windowStart, windowEnd] = (
+      mockAppointmentRepo.findOverlappingForProvider as ReturnType<typeof vi.fn>
+    ).mock.calls[0];
     expect(providerId).toBe("provider-1");
     expect((windowStart as Date).toISOString()).toBe(
       "2099-01-01T10:50:00.000Z",
     );
-    expect((windowEnd as Date).toISOString()).toBe(
-      "2099-01-01T11:55:00.000Z",
-    );
+    expect((windowEnd as Date).toISOString()).toBe("2099-01-01T11:55:00.000Z");
 
-    expect(mockRepo.save).toHaveBeenCalledWith(result);
+    expect(mockAppointmentRepo.save).toHaveBeenCalledWith(result);
     expect(mockEventBus.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "AppointmentUpdated",
@@ -170,34 +188,57 @@ describe("UpdateAppointmentUseCase", () => {
   });
 
   it("rejects conflicting schedule changes", async () => {
-    (mockRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
-      mockAppointment,
-    );
-    (mockRepo.findOverlappingForProvider as ReturnType<typeof vi.fn>)
-      .mockResolvedValue([
-        Appointment.rehydrate({
-          id: "appointment-2",
-          patientId: "patient-2",
-          providerId: "provider-1",
-          appointmentTypeId: "type-old",
-          durationMinutes: 30,
-          locationId: "location-old",
-          scheduledStart: "2099-01-01T11:15:00.000Z",
-          scheduledEnd: "2099-01-01T11:45:00.000Z",
-          status: "SCHEDULED",
-          reason: null,
-          notes: null,
-          createdAt: "2098-12-30T10:00:00.000Z",
-          updatedAt: "2098-12-30T10:00:00.000Z",
+    (
+      mockAppointmentRepo.findById as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(mockAppointment);
+    (
+      mockScheduleRepo.findByProviderAndDay as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([
+      {
+        id: "schedule-1",
+        providerId: "provider-1",
+        dayOfWeek: 1,
+        startTime: "09:00",
+        endTime: "17:00",
+        isActive: true,
+        getWorkingHoursForDate: () => ({
+          start: new Date("2099-01-01T09:00:00.000Z"),
+          end: new Date("2099-01-01T17:00:00.000Z"),
         }),
-      ]);
-    (prisma.clinicSettings.findFirst as ReturnType<typeof vi.fn>)
-      .mockResolvedValue({
-        appointmentBufferMinutes: 0,
-      });
+      },
+    ]);
+    (
+      mockBlockRepo.findByProviderAndDateRange as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([]);
+    (
+      mockAppointmentRepo.findOverlappingForProvider as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([
+      Appointment.rehydrate({
+        id: "appointment-2",
+        patientId: "patient-2",
+        providerId: "provider-1",
+        appointmentTypeId: "type-old",
+        durationMinutes: 30,
+        locationId: "location-old",
+        scheduledStart: "2099-01-01T11:15:00.000Z",
+        scheduledEnd: "2099-01-01T11:45:00.000Z",
+        status: "SCHEDULED",
+        reason: null,
+        notes: null,
+        createdAt: "2098-12-30T10:00:00.000Z",
+        updatedAt: "2098-12-30T10:00:00.000Z",
+      }),
+    ]);
+    (
+      prisma.clinicSettings.findFirst as ReturnType<typeof vi.fn>
+    ).mockResolvedValue({
+      appointmentBufferMinutes: 0,
+    });
 
     const useCase = new UpdateAppointmentUseCase(
-      mockRepo as IAppointmentRepository,
+      mockAppointmentRepo as IAppointmentRepository,
+      mockScheduleRepo as IProviderScheduleRepository,
+      mockBlockRepo as IScheduleBlockRepository,
       mockEventBus as IEventBus,
       mockLogger as Logger,
     );
@@ -208,6 +249,6 @@ describe("UpdateAppointmentUseCase", () => {
       }),
     ).rejects.toThrow(ConflictError);
 
-    expect(mockRepo.save).not.toHaveBeenCalled();
+    expect(mockAppointmentRepo.save).not.toHaveBeenCalled();
   });
 });
