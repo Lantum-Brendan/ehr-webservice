@@ -7,6 +7,7 @@ import {
 } from "../domain/scheduleRepository.js";
 import { IEventBus } from "@shared/event-bus/event-bus.interface.js";
 import { type Logger } from "@shared/logger/index.js";
+import { Prisma } from "@prisma/client";
 import {
   NotFoundError,
   ConflictError,
@@ -37,6 +38,13 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
     : "Invalid appointment creation";
+}
+
+function isSerializableTransactionConflict(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2034"
+  );
 }
 
 export class CreateAppointmentUseCase {
@@ -78,11 +86,11 @@ export class CreateAppointmentUseCase {
       throw new ConflictError("Appointment type is not available");
     }
 
-    const selfBookingSettings = await prisma.clinicSettings.findFirst();
+    const clinicSettings = await prisma.clinicSettings.findFirst();
     const isSelfBooking = input.isSelfBooking ?? false;
 
     if (isSelfBooking) {
-      if (!selfBookingSettings?.patientSelfBookingEnabled) {
+      if (!clinicSettings?.patientSelfBookingEnabled) {
         throw new ConflictError(
           "Patient self-booking is not currently enabled",
         );
@@ -100,7 +108,7 @@ export class CreateAppointmentUseCase {
         );
       }
 
-      const maxAdvanceDays = selfBookingSettings.maxAdvanceBookingDays ?? 30;
+      const maxAdvanceDays = clinicSettings.maxAdvanceBookingDays ?? 30;
       const now = new Date();
       const maxDate = new Date(
         now.getTime() + maxAdvanceDays * 24 * 60 * 60 * 1000,
@@ -162,19 +170,14 @@ export class CreateAppointmentUseCase {
       );
     }
 
-    const workingHours = activeSchedules[0].getWorkingHoursForDate(
-      appointment.scheduledStart,
+    const isWithinWorkingHours = activeSchedules.some((schedule) =>
+      schedule.coversInterval(
+        appointment.scheduledStart,
+        appointment.scheduledEnd,
+      ),
     );
-    if (!workingHours) {
-      throw new ConflictError(
-        "Provider is not available at this time. Please choose a different time.",
-      );
-    }
 
-    if (
-      appointment.scheduledStart < workingHours.start ||
-      appointment.scheduledEnd > workingHours.end
-    ) {
+    if (!isWithinWorkingHours) {
       throw new ConflictError(
         "Appointment falls outside provider's working hours.",
       );
@@ -196,34 +199,44 @@ export class CreateAppointmentUseCase {
       );
     }
 
-    const bufferSettings = await prisma.clinicSettings.findFirst();
-    const bufferMinutes = bufferSettings?.appointmentBufferMinutes ?? 0;
+    const bufferMinutes = clinicSettings?.appointmentBufferMinutes ?? 0;
 
-    const existingAppointments =
-      await this.appointmentRepo.findOverlappingForProvider(
-        input.providerId,
-        subtractMinutes(appointment.scheduledStart, bufferMinutes),
-        addMinutes(appointment.scheduledEnd, bufferMinutes),
-      );
+    try {
+      await this.appointmentRepo.withSerializableTransaction(async (repo) => {
+        const existingAppointments = await repo.findOverlappingForProvider(
+          input.providerId,
+          subtractMinutes(appointment.scheduledStart, bufferMinutes),
+          addMinutes(appointment.scheduledEnd, bufferMinutes),
+        );
 
-    const hasConflict = existingAppointments.some((apt) => apt.isActive);
+        const hasConflict = existingAppointments.some((apt) => apt.isActive);
 
-    if (hasConflict) {
-      this.logger.warn(
-        {
-          providerId: input.providerId,
-          scheduledStart: appointment.scheduledStart,
-          scheduledEnd: appointment.scheduledEnd,
-          bufferMinutes,
-        },
-        "Time slot conflicts with existing appointment",
-      );
-      throw new ConflictError(
-        "Time slot is not available. Please choose a different time.",
-      );
+        if (hasConflict) {
+          this.logger.warn(
+            {
+              providerId: input.providerId,
+              scheduledStart: appointment.scheduledStart,
+              scheduledEnd: appointment.scheduledEnd,
+              bufferMinutes,
+            },
+            "Time slot conflicts with existing appointment",
+          );
+          throw new ConflictError(
+            "Time slot is not available. Please choose a different time.",
+          );
+        }
+
+        await repo.save(appointment);
+      });
+    } catch (error) {
+      if (isSerializableTransactionConflict(error)) {
+        throw new ConflictError(
+          "Time slot is no longer available. Please choose a different time.",
+        );
+      }
+
+      throw error;
     }
-
-    await this.appointmentRepo.save(appointment);
 
     await this.eventBus.publish({
       type: "AppointmentCreated",
