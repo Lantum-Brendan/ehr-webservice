@@ -5,6 +5,7 @@ import { ForbiddenError } from "@core/errors/appError.js";
 import { CreateAppointmentUseCase } from "../application/createAppointmentUseCase.js";
 import { UpdateAppointmentUseCase } from "../application/updateAppointmentUseCase.js";
 import { CancelAppointmentUseCase } from "../application/cancelAppointmentUseCase.js";
+import { CheckInAppointmentUseCase } from "../application/checkInAppointmentUseCase.js";
 import { GetAppointmentUseCase } from "../application/getAppointmentUseCase.js";
 import { GetAppointmentsForPatientUseCase } from "../application/getAppointmentsForPatientUseCase.js";
 import { GetAvailableSlotsUseCase } from "../application/getAvailableSlotsUseCase.js";
@@ -89,6 +90,12 @@ const updateAppointmentUseCase = new UpdateAppointmentUseCase(
 );
 
 const cancelAppointmentUseCase = new CancelAppointmentUseCase(
+  appointmentRepo,
+  eventBus,
+  logger,
+);
+
+const checkInAppointmentUseCase = new CheckInAppointmentUseCase(
   appointmentRepo,
   eventBus,
   logger,
@@ -250,6 +257,21 @@ appointmentRouter.put(
       );
 
       res.json(toAppointmentCancellationDto(appointment));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+appointmentRouter.put(
+  "/:id/check-in",
+  requireRole("admin", "reception", "clinician"),
+  async (req, res, next) => {
+    try {
+      const appointment = await checkInAppointmentUseCase.execute(
+        req.params.id,
+      );
+      res.json(toAppointmentDto(appointment));
     } catch (error) {
       next(error);
     }

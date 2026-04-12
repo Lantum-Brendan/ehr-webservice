@@ -285,7 +285,10 @@ export class Appointment {
       this._notes = props.notes ?? null;
     }
 
-    if (props.scheduledStart !== undefined || props.durationMinutes !== undefined) {
+    if (
+      props.scheduledStart !== undefined ||
+      props.durationMinutes !== undefined
+    ) {
       const scheduledStart =
         props.scheduledStart !== undefined
           ? normalizeDate(props.scheduledStart)
@@ -312,6 +315,20 @@ export class Appointment {
     }
 
     this._updatedAt = now;
+  }
+
+  checkIn(now?: Date): void {
+    if (
+      this._status !== AppointmentStatus.SCHEDULED &&
+      this._status !== AppointmentStatus.CONFIRMED
+    ) {
+      throw new Error(
+        `Cannot check in appointment with status ${this._status}. Only scheduled or confirmed appointments can be checked in.`,
+      );
+    }
+    const checkInTime = resolveNow(now);
+    this._status = AppointmentStatus.CHECKED_IN;
+    this._updatedAt = checkInTime;
   }
 
   cancel(
