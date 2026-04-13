@@ -90,10 +90,6 @@ export class ScheduleBlock {
     return time >= this.startDateTime && time < this.endDateTime;
   }
 
-  blocksInterval(start: Date, end: Date): boolean {
-    return this.startDateTime < end && this.endDateTime > start;
-  }
-
   overlapsWith(start: Date, end: Date): boolean {
     return this.startDateTime < end && this.endDateTime > start;
   }
