@@ -99,12 +99,13 @@ export class ClinicalNote {
     updatedAt: Date | string;
   }): ClinicalNote {
     let signedAt: Date | null;
-let signedAt: Date | null;
-if (props.signedAt instanceof Date) signedAt = props.signedAt;
-else if (props.signedAt) signedAt = new Date(props.signedAt);
-else signedAt = null;
-else if (props.signedAt) signedAt = new Date(props.signedAt);
-else signedAt = null;
+if (props.signedAt instanceof Date) {
+  signedAt = props.signedAt;
+} else if (props.signedAt) {
+  signedAt = new Date(props.signedAt);
+} else {
+  signedAt = null;
+}
     return new ClinicalNote(
       props.id,
       props.encounterId,
