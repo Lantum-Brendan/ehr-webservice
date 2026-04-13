@@ -52,25 +52,26 @@ export class CopyWeekScheduleUseCase {
       ? sourceSchedules.filter((s) => s.isActive)
       : sourceSchedules;
 
+    const existingTargetSchedules = await this.scheduleRepo.findByProviderId(
+      input.targetProviderId,
+    );
+
     const targetSchedules: ProviderSchedule[] = [];
     const warnings: string[] = [];
 
     for (const sourceSchedule of schedulesToCopy) {
-      const targetSchedulesOnDay = await this.scheduleRepo.findByProviderAndDay(
-        input.targetProviderId,
-        sourceSchedule.dayOfWeek,
+      const conflict = existingTargetSchedules.find(
+        (target) =>
+          target.dayOfWeek === sourceSchedule.dayOfWeek &&
+          target.startTime === sourceSchedule.startTime &&
+          target.endTime === sourceSchedule.endTime,
       );
 
-      for (const target of targetSchedulesOnDay) {
-        if (
-          target.startTime === sourceSchedule.startTime &&
-          target.endTime === sourceSchedule.endTime
-        ) {
-          warnings.push(
-            `Day ${sourceSchedule.dayOfWeek}: ${sourceSchedule.startTime}-${sourceSchedule.endTime} already exists`,
-          );
-          continue;
-        }
+      if (conflict) {
+        warnings.push(
+          `Day ${sourceSchedule.dayOfWeek}: ${sourceSchedule.startTime}-${sourceSchedule.endTime} already exists`,
+        );
+        continue;
       }
 
       const newSchedule = ProviderSchedule.create({
