@@ -9,7 +9,9 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
   constructor(private readonly db: AppointmentDbClient = prisma) {}
 
   private mapToAppointment(
-    record: Awaited<ReturnType<AppointmentDbClient["appointment"]["findUnique"]>>,
+    record: Awaited<
+      ReturnType<AppointmentDbClient["appointment"]["findUnique"]>
+    >,
   ): Appointment | null {
     if (!record) {
       return null;
@@ -55,7 +57,9 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
       orderBy: { scheduledStart: "asc" },
     });
 
-    return records.map((record) => this.mapToAppointment(record)!);
+    return records
+      .map((record) => this.mapToAppointment(record))
+      .filter(Boolean) as Appointment[];
   }
 
   async findByProviderId(providerId: string): Promise<Appointment[]> {
@@ -64,7 +68,9 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
       orderBy: { scheduledStart: "asc" },
     });
 
-    return records.map((record) => this.mapToAppointment(record)!);
+    return records
+      .map((record) => this.mapToAppointment(record))
+      .filter(Boolean) as Appointment[];
   }
 
   async findByDateRange(
@@ -81,7 +87,9 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
       orderBy: { scheduledStart: "asc" },
     });
 
-    return records.map((record) => this.mapToAppointment(record)!);
+    return records
+      .map((record) => this.mapToAppointment(record))
+      .filter(Boolean) as Appointment[];
   }
 
   async findByProviderAndDateRange(
@@ -100,7 +108,9 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
       orderBy: { scheduledStart: "asc" },
     });
 
-    return records.map((record) => this.mapToAppointment(record)!);
+    return records
+      .map((record) => this.mapToAppointment(record))
+      .filter(Boolean) as Appointment[];
   }
 
   async findOverlappingForProvider(
@@ -111,17 +121,15 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
     const records = await this.db.appointment.findMany({
       where: {
         providerId,
-        scheduledStart: {
-          lt: endDate,
-        },
-        scheduledEnd: {
-          gt: startDate,
-        },
+        scheduledStart: { lt: endDate },
+        scheduledEnd: { gt: startDate },
       },
       orderBy: { scheduledStart: "asc" },
     });
 
-    return records.map((record) => this.mapToAppointment(record)!);
+    return records
+      .map((record) => this.mapToAppointment(record))
+      .filter(Boolean) as Appointment[];
   }
 
   async withSerializableTransaction<T>(
@@ -156,21 +164,23 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
   }
 
   async save(appointment: Appointment): Promise<void> {
+    const data = appointment.toJSON();
+
     await this.db.appointment.upsert({
       where: { id: appointment.id },
       update: {
-        appointmentTypeId: appointment.appointmentTypeId,
-        durationMinutes: appointment.durationMinutes,
-        locationId: appointment.locationId,
-        scheduledStart: appointment.scheduledStart,
-        scheduledEnd: appointment.scheduledEnd,
-        status: appointment.status,
-        reason: appointment.reason,
-        notes: appointment.notes,
-        cancelledAt: appointment.cancelledAt,
-        cancelledBy: appointment.cancelledBy,
-        cancelledReason: appointment.cancelledReason,
-        updatedAt: appointment.updatedAt,
+        appointmentTypeId: data.appointmentTypeId,
+        durationMinutes: data.durationMinutes,
+        locationId: data.locationId,
+        scheduledStart: data.scheduledStart,
+        scheduledEnd: data.scheduledEnd,
+        status: data.status,
+        reason: data.reason,
+        notes: data.notes,
+        cancelledAt: data.cancelledAt,
+        cancelledBy: data.cancelledBy,
+        cancelledReason: data.cancelledReason,
+        updatedAt: data.updatedAt,
       },
       create: {
         id: appointment.id,
@@ -178,17 +188,14 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
         providerId: appointment.providerId,
         appointmentTypeId: appointment.appointmentTypeId,
         durationMinutes: appointment.durationMinutes,
-        locationId: appointment.locationId,
-        scheduledStart: appointment.scheduledStart,
-        scheduledEnd: appointment.scheduledEnd,
-        status: appointment.status,
-        reason: appointment.reason,
-        notes: appointment.notes,
-        createdAt: appointment.createdAt,
-        updatedAt: appointment.updatedAt,
-        cancelledAt: appointment.cancelledAt,
-        cancelledBy: appointment.cancelledBy,
-        cancelledReason: appointment.cancelledReason,
+        locationId: data.locationId,
+        scheduledStart: data.scheduledStart,
+        scheduledEnd: data.scheduledEnd,
+        status: data.status,
+        reason: data.reason,
+        notes: data.notes,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
       },
     });
   }

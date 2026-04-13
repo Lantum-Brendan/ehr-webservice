@@ -1,15 +1,18 @@
 import { Appointment } from "../domain/appointmentEntity.js";
 import { IAppointmentRepository } from "../domain/appointmentRepository.js";
+import {
+  IProviderScheduleRepository,
+  IScheduleBlockRepository,
+} from "../domain/scheduleRepository.js";
 import { IEventBus } from "@shared/event-bus/event-bus.interface.js";
 import { type Logger } from "@shared/logger/index.js";
-import { Prisma } from "@prisma/client";
 import {
   BadRequestError,
   ConflictError,
   NotFoundError,
 } from "@core/errors/appError.js";
 import { prisma } from "@infrastructure/database/prisma.client.js";
-import { getAppointmentClinicSettings } from "../infrastructure/appointmentClinicSettings.js";
+import { Prisma } from "@prisma/client";
 
 interface UpdateAppointmentInput {
   appointmentTypeId?: string;
@@ -20,16 +23,16 @@ interface UpdateAppointmentInput {
   notes?: string;
 }
 
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Invalid appointment update";
-}
-
 function addMinutes(date: Date, minutes: number): Date {
   return new Date(date.getTime() + minutes * 60 * 1000);
 }
 
 function subtractMinutes(date: Date, minutes: number): Date {
   return new Date(date.getTime() - minutes * 60 * 1000);
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Invalid appointment update";
 }
 
 function isSerializableTransactionConflict(error: unknown): boolean {
@@ -42,6 +45,8 @@ function isSerializableTransactionConflict(error: unknown): boolean {
 export class UpdateAppointmentUseCase {
   constructor(
     private readonly appointmentRepo: IAppointmentRepository,
+    private readonly scheduleRepo: IProviderScheduleRepository,
+    private readonly blockRepo: IScheduleBlockRepository,
     private readonly eventBus: IEventBus,
     private readonly logger: Logger,
   ) {}
@@ -51,7 +56,6 @@ export class UpdateAppointmentUseCase {
     input: UpdateAppointmentInput,
   ): Promise<Appointment> {
     this.logger.info({ appointmentId: id, input }, "Updating appointment");
-    const now = new Date();
 
     const currentAppointment = await this.appointmentRepo.findById(id);
     if (!currentAppointment) {
@@ -98,14 +102,15 @@ export class UpdateAppointmentUseCase {
         where: { id: input.locationId },
       });
       if (!locationRecord) {
-        throw new NotFoundError(`Location with ID ${input.locationId} not found`);
+        throw new NotFoundError(
+          `Location with ID ${input.locationId} not found`,
+        );
       }
       if (!locationRecord.isActive) {
         throw new ConflictError("Location is not available");
       }
     }
 
-    const draft = Appointment.rehydrate(currentAppointment.toJSON());
     const appointmentUpdate: Parameters<Appointment["updateDetails"]>[0] = {};
 
     if (input.appointmentTypeId !== undefined) {
@@ -131,11 +136,10 @@ export class UpdateAppointmentUseCase {
       appointmentUpdate.notes = input.notes;
     }
 
+    const draft = Appointment.rehydrate(currentAppointment.toJSON());
+
     try {
-      draft.updateDetails({
-        ...appointmentUpdate,
-        now,
-      });
+      draft.updateDetails(appointmentUpdate);
     } catch (error) {
       throw new BadRequestError(getErrorMessage(error));
     }
@@ -145,15 +149,50 @@ export class UpdateAppointmentUseCase {
       input.durationMinutes !== undefined ||
       input.scheduledStart !== undefined;
 
-    const settings = shouldCheckConflicts
-      ? await getAppointmentClinicSettings()
-      : null;
+    if (shouldCheckConflicts) {
+      const schedules = await this.scheduleRepo.findByProviderAndDay(
+        currentAppointment.providerId,
+        draft.scheduledStart.getDay(),
+      );
+      const activeSchedules = schedules.filter((s) => s.isActive);
 
-    try {
-      await this.appointmentRepo.withSerializableTransaction(async (repo) => {
-        if (shouldCheckConflicts) {
-          const bufferMinutes = settings?.appointmentBufferMinutes ?? 0;
+      if (activeSchedules.length === 0) {
+        throw new ConflictError(
+          "Provider is not available on this day. Please choose a different provider or day.",
+        );
+      }
 
+      const isWithinWorkingHours = activeSchedules.some((schedule) =>
+        schedule.coversInterval(draft.scheduledStart, draft.scheduledEnd),
+      );
+
+      if (!isWithinWorkingHours) {
+        throw new ConflictError(
+          "Appointment falls outside provider's working hours.",
+        );
+      }
+
+      const blocks = await this.blockRepo.findByProviderAndDateRange(
+        currentAppointment.providerId,
+        new Date(draft.scheduledStart.getTime() - 60 * 60 * 1000),
+        new Date(draft.scheduledEnd.getTime() + 60 * 60 * 1000),
+      );
+
+      const hasBlockConflict = blocks.some((block) =>
+        block.overlapsWith(draft.scheduledStart, draft.scheduledEnd),
+      );
+
+      if (hasBlockConflict) {
+        throw new ConflictError(
+          "This time slot is blocked. Please choose a different time.",
+        );
+      }
+
+      const settings = await prisma.clinicSettings.findFirst();
+      const bufferMinutes = settings?.appointmentBufferMinutes ?? 0;
+
+      try {
+        await this.appointmentRepo.withSerializableTransaction(async (repo) => {
           const existingAppointments = await repo.findOverlappingForProvider(
             currentAppointment.providerId,
             subtractMinutes(draft.scheduledStart, bufferMinutes),
@@ -169,43 +208,50 @@ export class UpdateAppointmentUseCase {
               "Time slot is not available. Please choose a different time.",
             );
           }
+
+          await repo.save(draft);
+        });
+      } catch (error) {
+        if (isSerializableTransactionConflict(error)) {
+          throw new ConflictError(
+            "Time slot is no longer available. Please choose a different time.",
+          );
         }
 
-        await repo.save(draft);
-      });
-    } catch (error) {
-      if (isSerializableTransactionConflict(error)) {
-        throw new ConflictError(
-          "Time slot is no longer available. Please choose a different time.",
-        );
+        throw error;
       }
-
-      throw error;
+    } else {
+      await this.appointmentRepo.save(draft);
     }
+
+    currentAppointment.updateDetails({
+      ...appointmentUpdate,
+      now: draft.updatedAt,
+    });
 
     await this.eventBus.publish({
       type: "AppointmentUpdated",
-      aggregateId: draft.id,
+      aggregateId: currentAppointment.id,
       aggregateType: "Appointment",
       occurredOn: new Date(),
       payload: {
-        appointmentId: draft.id,
+        appointmentId: currentAppointment.id,
         updates: input,
-        scheduledStart: draft.scheduledStart.toISOString(),
-        scheduledEnd: draft.scheduledEnd.toISOString(),
-        durationMinutes: draft.durationMinutes,
-        appointmentTypeId: draft.appointmentTypeId,
-        locationId: draft.locationId,
-        reason: draft.reason,
-        notes: draft.notes,
+        scheduledStart: currentAppointment.scheduledStart.toISOString(),
+        scheduledEnd: currentAppointment.scheduledEnd.toISOString(),
+        durationMinutes: currentAppointment.durationMinutes,
+        appointmentTypeId: currentAppointment.appointmentTypeId,
+        locationId: currentAppointment.locationId,
+        reason: currentAppointment.reason,
+        notes: currentAppointment.notes,
       },
     });
 
     this.logger.info(
-      { appointmentId: draft.id },
+      { appointmentId: currentAppointment.id },
       "Appointment updated successfully",
     );
 
-    return draft;
+    return currentAppointment;
   }
 }

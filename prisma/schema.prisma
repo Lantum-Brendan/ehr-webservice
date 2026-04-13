@@ -32,14 +32,18 @@ model Patient {
 }
 
 model Encounter {
-  id           String   @id @default(uuid())
-  patientId    String
-  patient      Patient  @relation(fields: [patientId], references: [id])
-  encounterType String
-  startTime    DateTime
-  endTime      DateTime?
-  status       String   @default("planned")
-  createdAt    DateTime @default(now())
+  id             String   @id @default(uuid())
+  patientId      String
+  patient        Patient  @relation(fields: [patientId], references: [id])
+  appointmentId  String?
+  appointment    Appointment? @relation(fields: [appointmentId], references: [id])
+  providerId     String?
+  provider       Provider? @relation(fields: [providerId], references: [id])
+  encounterType  String
+  startTime      DateTime
+  endTime        DateTime?
+  status         String   @default("planned")
+  createdAt      DateTime @default(now())
 
   @@map("encounters")
 }
@@ -76,9 +80,13 @@ model Provider {
   name           String
   specialization String?
   isActive       Boolean  @default(true)
+  selfBookingEnabled Boolean @default(false)  // patients can book this provider
   createdAt     DateTime @default(now())
   
   appointments  Appointment[]
+  encounters    Encounter[]
+  schedules     ProviderSchedule[]
+  scheduleBlocks ScheduleBlock[]
   
   @@map("providers")
 }
@@ -102,11 +110,39 @@ model AppointmentType {
   defaultDurationMinutes Int      @default(15)
   color                 String?
   isActive               Boolean  @default(true)
+  selfBookingEnabled    Boolean  @default(false)  // patients can self-book this type
   createdAt             DateTime @default(now())
   
   appointments Appointment[]
   
   @@map("appointment_types")
+}
+
+// Provider recurring weekly schedule
+model ProviderSchedule {
+  id          String   @id @default(uuid())
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id])
+  dayOfWeek  Int      // 0=Sunday, 1=Monday, ..., 6=Saturday
+  startTime  String   // "08:00" in HH:mm format
+  endTime   String   // "17:00" in HH:mm format
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  
+  @@map("provider_schedules")
+}
+
+// One-off schedule blocks (lunch, vacation, meetings)
+model ScheduleBlock {
+  id           String   @id @default(uuid())
+  providerId  String
+  provider    Provider @relation(fields: [providerId], references: [id])
+  startDateTime DateTime
+  endDateTime DateTime
+  reason      String   // "Lunch", "Annual Leave", "Meeting"
+  createdAt   DateTime @default(now())
+  
+  @@map("schedule_blocks")
 }
 
 model Appointment {
@@ -131,6 +167,8 @@ model Appointment {
   cancelledBy    String?
   cancelledReason String?
   
+  encounters    Encounter[]
+  
   @@map("appointments")
 }
 
@@ -139,6 +177,8 @@ model ClinicSettings {
   cancellationCutoffHours   Int      @default(24)
   clinicName              String   @default("Default Clinic")
   appointmentBufferMinutes Int      @default(0)   // buffer time between appointments
+  patientSelfBookingEnabled Boolean  @default(false)  // allow patients to book
+  maxAdvanceBookingDays    Int      @default(30)    // how far in advance patients can book
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   
