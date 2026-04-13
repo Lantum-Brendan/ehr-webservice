@@ -10,8 +10,10 @@ import { errorHandler } from "./core/errors/error-handler.js";
 import { config } from "./core/config/index.js";
 
 // Domain routers (will be created when implementing each domain)
-// import { patientRouter } from './domains/patient/presentation/patient.router.js';
-// import { encounterRouter } from './domains/encounter/presentation/encounter.router.js';
+// import { patientRouter } from './domains/patient/presentation/patientRouter.js';
+// import { appointmentRouter } from './domains/appointment/presentation/appointmentRouter.js';
+// import { encounterRouter } from './domains/encounter/presentation/encounterRouter.js';
+import { clinicalNoteRouter } from "./domains/clinical-note/presentation/clinicalNoteRouter.js";
 
 export function createApp(): Express {
   const app = express();
@@ -61,8 +63,9 @@ export function createApp(): Express {
 
   // Domain routers - mount here when implemented
   // app.use('/api/v1/patients', patientRouter);
+  // app.use('/api/v1/appointments', appointmentRouter);
   // app.use('/api/v1/encounters', encounterRouter);
-  // app.use('/api/v1/fhir', fhirGatewayRouter);
+  app.use("/api/v1/clinical-notes", clinicalNoteRouter);
 
   // Placeholder route
   app.get("/api/v1", (_req: Request, res: Response) => {

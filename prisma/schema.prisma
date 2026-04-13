@@ -45,16 +45,26 @@ model Encounter {
   status         String   @default("planned")
   createdAt      DateTime @default(now())
 
+  clinicalNotes  ClinicalNote[]
+
   @@map("encounters")
 }
 
 model ClinicalNote {
-  id         String   @id @default(uuid())
-  patientId  String
-  patient    Patient  @relation(fields: [patientId], references: [id])
-  noteText   String   @db.Text
-  authorId   String
-  createdAt  DateTime @default(now())
+  id           String   @id @default(uuid())
+  encounterId  String
+  encounter   Encounter @relation(fields: [encounterId], references: [id])
+  patientId    String
+  patient      Patient   @relation(fields: [patientId], references: [id])
+  authorId     String
+  subjective   String?   @db.Text
+  objective   String?   @db.Text
+  assessment   String?   @db.Text
+  plan         String?   @db.Text
+  status      String    @default("DRAFT")  // DRAFT, SIGNED
+  signedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@map("clinical_notes")
 }
