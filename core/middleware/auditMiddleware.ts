@@ -2,6 +2,32 @@ import { Request, Response, NextFunction } from "express";
 import { logger } from "../../shared/logger/index.js";
 import { config } from "../config/index.js";
 
+const BILLING_PATHS = ["/invoices", "/payments", "/line-items"];
+
+function isBillingOperation(path: string): boolean {
+  return BILLING_PATHS.some((p) => path.includes(p));
+}
+
+function sanitizeForAudit(
+  obj: Record<string, unknown>,
+): Record<string, unknown> {
+  const sensitive = ["amount", "reference", "card", "account", "ssn", "credit"];
+  const sanitized: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(obj)) {
+    const keyLower = key.toLowerCase();
+    if (sensitive.some((s) => keyLower.includes(s))) {
+      sanitized[key] = "[REDACTED]";
+    } else if (typeof value === "object" && value !== null) {
+      sanitized[key] = sanitizeForAudit(value as Record<string, unknown>);
+    } else {
+      sanitized[key] = value;
+    }
+  }
+
+  return sanitized;
+}
+
 /**
  * HIPAA audit middleware - logs all PHI access and modifications
  * This middleware should run early in the chain to capture all requests
@@ -17,34 +43,38 @@ export const auditMiddleware = (
     return;
   }
 
-  // Capture request start time
   const startTime = Date.now();
+  const isBilling = isBillingOperation(req.path);
 
-  // Log the request
-  const auditLog = {
+  const auditLog: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
     requestId: req.id,
     method: req.method,
     path: req.path,
-    query: req.query,
     ip: req.ip,
     userAgent: req.get("user-agent"),
-    // Extract user information from auth token if available
     userId: req.userId,
-    patientId: req.params?.id || req.body?.patientId,
-    resourceType: req.body?.resourceType,
+    patientId: req.params?.patientId || req.body?.patientId,
     action: req.method,
   };
 
-  // Log audit event at info level
+  if (isBilling) {
+    auditLog.requestBody = sanitizeForAudit(
+      req.body as Record<string, unknown>,
+    );
+    auditLog.resourceType = "billing";
+  } else {
+    auditLog.query = req.query;
+    auditLog.resourceType = req.body?.resourceType;
+  }
+
   logger.info(auditLog, "AUDIT: Request received");
 
-  // Intercept response to log completion
   const originalSend = res.send;
   res.send = function (body) {
     const duration = Date.now() - startTime;
 
-    const completionLog = {
+    const completionLog: Record<string, unknown> = {
       timestamp: new Date().toISOString(),
       requestId: req.id,
       statusCode: res.statusCode,
@@ -52,13 +82,17 @@ export const auditMiddleware = (
       success: res.statusCode >= 200 && res.statusCode < 300,
     };
 
+    if (isBilling) {
+      completionLog.resourceType = "billing";
+      completionLog.patientId = req.params?.patientId || req.body?.patientId;
+    }
+
     if (res.statusCode >= 400) {
       logger.warn(completionLog, "AUDIT: Request completed with error");
     } else {
       logger.info(completionLog, "AUDIT: Request completed successfully");
     }
 
-    // Restore original send
     res.send = originalSend;
     return originalSend.apply(res, [body]);
   };
