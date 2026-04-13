@@ -4,13 +4,29 @@ import {
   type IProviderScheduleRepository,
 } from "../domain/scheduleRepository.js";
 import { type Logger } from "@shared/logger/index.js";
-import { NotFoundError, ConflictError } from "@core/errors/appError.js";
+import { NotFoundError, ForbiddenError } from "@core/errors/appError.js";
 
 interface CreateBlockInput {
   providerId: string;
   startDateTime: Date | string;
   endDateTime: Date | string;
   reason: string;
+}
+
+interface AuthorizeAccessInput {
+  targetProviderId: string;
+  userId: string;
+  userRoles: string[];
+}
+
+function authorizeAccess(input: AuthorizeAccessInput): void {
+  const isAdmin = input.userRoles.includes("admin");
+  const isReception = input.userRoles.includes("reception");
+  const isOwnData = input.targetProviderId === input.userId;
+
+  if (!isAdmin && !isReception && !isOwnData) {
+    throw new ForbiddenError("You can only manage your own schedule");
+  }
 }
 
 export class CreateBlockUseCase {
@@ -20,7 +36,17 @@ export class CreateBlockUseCase {
     private readonly logger: Logger,
   ) {}
 
-  async execute(input: CreateBlockInput): Promise<ScheduleBlock> {
+  async execute(
+    input: CreateBlockInput,
+    userId: string,
+    userRoles: string[],
+  ): Promise<{ block: ScheduleBlock; warnings: string[] }> {
+    authorizeAccess({
+      targetProviderId: input.providerId,
+      userId,
+      userRoles,
+    });
+
     this.logger.info(
       { providerId: input.providerId },
       "Creating schedule block",
@@ -38,21 +64,21 @@ export class CreateBlockUseCase {
     const existingSchedules = await this.scheduleRepo.findByProviderId(
       input.providerId,
     );
-    const conflicts: string[] = [];
+    const warnings: string[] = [];
 
     for (const schedule of existingSchedules) {
       const scheduleStart = schedule.getWorkingHoursForDate(startDate);
       if (scheduleStart) {
         if (startDate < scheduleStart.end && endDate > scheduleStart.start) {
-          conflicts.push(
+          warnings.push(
             `Blocks schedule on day ${schedule.dayOfWeek} (${schedule.startTime}-${schedule.endTime})`,
           );
         }
       }
     }
 
-    if (conflicts.length > 0) {
-      this.logger.warn({ conflicts }, "Block overlaps with schedules");
+    if (warnings.length > 0) {
+      this.logger.warn({ warnings }, "Block overlaps with schedules");
     }
 
     const block = ScheduleBlock.create({
@@ -66,7 +92,7 @@ export class CreateBlockUseCase {
 
     this.logger.info({ blockId: block.id }, "Schedule block created");
 
-    return block;
+    return { block, warnings };
   }
 }
 
@@ -83,6 +109,8 @@ export class UpdateBlockUseCase {
       endDateTime?: Date | string;
       reason?: string;
     },
+    userId: string,
+    userRoles: string[],
   ): Promise<ScheduleBlock> {
     this.logger.info({ blockId }, "Updating schedule block");
 
@@ -90,6 +118,12 @@ export class UpdateBlockUseCase {
     if (!block) {
       throw new NotFoundError(`Block with ID ${blockId} not found`);
     }
+
+    authorizeAccess({
+      targetProviderId: block.providerId,
+      userId,
+      userRoles,
+    });
 
     const startDate = input.startDateTime
       ? new Date(input.startDateTime)
@@ -99,6 +133,7 @@ export class UpdateBlockUseCase {
       : block.endDateTime;
 
     const updatedBlock = ScheduleBlock.create({
+      id: block.id,
       providerId: block.providerId,
       startDateTime: startDate,
       endDateTime: endDate,
@@ -119,13 +154,23 @@ export class DeleteBlockUseCase {
     private readonly logger: Logger,
   ) {}
 
-  async execute(blockId: string): Promise<void> {
+  async execute(
+    blockId: string,
+    userId: string,
+    userRoles: string[],
+  ): Promise<void> {
     this.logger.info({ blockId }, "Deleting schedule block");
 
     const block = await this.blockRepo.findById(blockId);
     if (!block) {
       throw new NotFoundError(`Block with ID ${blockId} not found`);
     }
+
+    authorizeAccess({
+      targetProviderId: block.providerId,
+      userId,
+      userRoles,
+    });
 
     await this.blockRepo.delete(blockId);
 
@@ -152,7 +197,17 @@ export class ClearRangeUseCase {
     providerId: string,
     startDate: Date,
     endDate: Date,
+    userId: string,
+    userRoles: string[],
   ): Promise<{ schedulesDeleted: number; blocksDeleted: number }> {
+    const isAdmin = userRoles.includes("admin");
+    const isReception = userRoles.includes("reception");
+    const isOwnData = providerId === userId;
+
+    if (!isAdmin && !isReception && !isOwnData) {
+      throw new ForbiddenError("You can only manage your own schedule");
+    }
+
     this.logger.info(
       { providerId, startDate, endDate },
       "Clearing schedules and blocks in date range",
@@ -161,10 +216,16 @@ export class ClearRangeUseCase {
     const schedules = await this.scheduleRepo.findByProviderId(providerId);
     let schedulesDeleted = 0;
 
-    for (const schedule of schedules) {
-      const workingHours = schedule.getWorkingHoursForDate(startDate);
-      if (workingHours) {
-        if (startDate <= workingHours.end && endDate >= workingHours.start) {
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dayOfWeek = d.getDay();
+
+      for (const schedule of schedules) {
+        if (schedule.dayOfWeek === dayOfWeek) {
           await this.scheduleRepo.delete(schedule.id);
           schedulesDeleted++;
         }
@@ -173,8 +234,8 @@ export class ClearRangeUseCase {
 
     const blocks = await this.blockRepo.findByProviderAndDateRange(
       providerId,
-      startDate,
-      endDate,
+      start,
+      end,
     );
     const blocksDeleted = blocks.length;
 

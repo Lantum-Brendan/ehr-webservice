@@ -37,6 +37,7 @@ export class ProviderSchedule {
   }
 
   static create(props: {
+    id?: string;
     providerId: string;
     dayOfWeek: number;
     startTime: string;
@@ -63,7 +64,7 @@ export class ProviderSchedule {
     }
 
     return new ProviderSchedule(
-      uuidv4(),
+      props.id ?? uuidv4(),
       props.providerId,
       props.dayOfWeek,
       props.startTime,

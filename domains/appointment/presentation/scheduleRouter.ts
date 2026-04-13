@@ -147,7 +147,11 @@ scheduleRouter.post(
     try {
       const input = createScheduleSchema.parse(req.body);
 
-      const schedule = await createScheduleUseCase.execute(input);
+      const schedule = await createScheduleUseCase.execute(
+        input,
+        req.user?.id ?? "",
+        req.user?.roles ?? [],
+      );
 
       res.status(201).json({
         id: schedule.id,
@@ -173,10 +177,6 @@ scheduleRouter.put(
       const schedule = await updateScheduleUseCase.execute(
         req.params.id,
         input,
-      );
-
-      assertProviderOwnsData(
-        schedule.providerId,
         req.user?.id ?? "",
         req.user?.roles ?? [],
       );
@@ -200,7 +200,11 @@ scheduleRouter.delete(
   requireRole("admin", "reception"),
   async (req, res, next) => {
     try {
-      await deleteScheduleUseCase.execute(req.params.id);
+      await deleteScheduleUseCase.execute(
+        req.params.id,
+        req.user?.id ?? "",
+        req.user?.roles ?? [],
+      );
       res.status(204).send();
     } catch (error) {
       next(error);
@@ -215,10 +219,14 @@ scheduleRouter.post(
     try {
       const input = copyWeekSchema.parse(req.body);
 
-      const schedules = await copyWeekScheduleUseCase.execute(input);
+      const result = await copyWeekScheduleUseCase.execute(
+        input,
+        req.user?.id ?? "",
+        req.user?.roles ?? [],
+      );
 
-      res.status(201).json(
-        schedules.map((s) => ({
+      res.status(201).json({
+        schedules: result.schedules.map((s) => ({
           id: s.id,
           providerId: s.providerId,
           dayOfWeek: s.dayOfWeek,
@@ -226,7 +234,8 @@ scheduleRouter.post(
           endTime: s.endTime,
           isActive: s.isActive,
         })),
-      );
+        warnings: result.warnings,
+      });
     } catch (error) {
       next(error);
     }
@@ -273,14 +282,19 @@ scheduleRouter.post(
     try {
       const input = createBlockSchema.parse(req.body);
 
-      const block = await createBlockUseCase.execute(input);
+      const result = await createBlockUseCase.execute(
+        input,
+        req.user?.id ?? "",
+        req.user?.roles ?? [],
+      );
 
       res.status(201).json({
-        id: block.id,
-        providerId: block.providerId,
-        startDateTime: block.startDateTime.toISOString(),
-        endDateTime: block.endDateTime.toISOString(),
-        reason: block.reason,
+        id: result.block.id,
+        providerId: result.block.providerId,
+        startDateTime: result.block.startDateTime.toISOString(),
+        endDateTime: result.block.endDateTime.toISOString(),
+        reason: result.block.reason,
+        warnings: result.warnings,
       });
     } catch (error) {
       next(error);
@@ -295,7 +309,12 @@ scheduleRouter.put(
     try {
       const input = updateBlockSchema.parse(req.body);
 
-      const block = await updateBlockUseCase.execute(req.params.id, input);
+      const block = await updateBlockUseCase.execute(
+        req.params.id,
+        input,
+        req.user?.id ?? "",
+        req.user?.roles ?? [],
+      );
 
       res.json({
         id: block.id,
@@ -315,7 +334,11 @@ scheduleRouter.delete(
   requireRole("admin", "reception"),
   async (req, res, next) => {
     try {
-      await deleteBlockUseCase.execute(req.params.id);
+      await deleteBlockUseCase.execute(
+        req.params.id,
+        req.user?.id ?? "",
+        req.user?.roles ?? [],
+      );
       res.status(204).send();
     } catch (error) {
       next(error);
@@ -334,6 +357,8 @@ scheduleRouter.post(
         input.providerId,
         new Date(input.startDate),
         new Date(input.endDate),
+        req.user?.id ?? "",
+        req.user?.roles ?? [],
       );
 
       res.json(result);

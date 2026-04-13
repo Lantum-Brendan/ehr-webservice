@@ -4,7 +4,7 @@ import {
   type IScheduleBlockRepository,
 } from "../domain/scheduleRepository.js";
 import { type Logger } from "@shared/logger/index.js";
-import { NotFoundError, ConflictError } from "@core/errors/appError.js";
+import { NotFoundError, ForbiddenError } from "@core/errors/appError.js";
 
 interface CopyWeekInput {
   sourceProviderId: string;
@@ -19,7 +19,16 @@ export class CopyWeekScheduleUseCase {
     private readonly logger: Logger,
   ) {}
 
-  async execute(input: CopyWeekInput): Promise<ProviderSchedule[]> {
+  async execute(
+    input: CopyWeekInput,
+    userId: string,
+    userRoles: string[],
+  ): Promise<{ schedules: ProviderSchedule[]; warnings: string[] }> {
+    const isAdmin = userRoles.includes("admin");
+    if (!isAdmin) {
+      throw new ForbiddenError("Only admins can copy schedules");
+    }
+
     this.logger.info(
       {
         sourceProviderId: input.sourceProviderId,
@@ -44,7 +53,7 @@ export class CopyWeekScheduleUseCase {
       : sourceSchedules;
 
     const targetSchedules: ProviderSchedule[] = [];
-    const conflicts: string[] = [];
+    const warnings: string[] = [];
 
     for (const sourceSchedule of schedulesToCopy) {
       const targetSchedulesOnDay = await this.scheduleRepo.findByProviderAndDay(
@@ -57,9 +66,10 @@ export class CopyWeekScheduleUseCase {
           target.startTime === sourceSchedule.startTime &&
           target.endTime === sourceSchedule.endTime
         ) {
-          conflicts.push(
+          warnings.push(
             `Day ${sourceSchedule.dayOfWeek}: ${sourceSchedule.startTime}-${sourceSchedule.endTime} already exists`,
           );
+          continue;
         }
       }
 
@@ -75,18 +85,18 @@ export class CopyWeekScheduleUseCase {
       targetSchedules.push(newSchedule);
     }
 
-    if (conflicts.length > 0) {
+    if (warnings.length > 0) {
       this.logger.warn(
-        { conflicts },
+        { warnings },
         "Some schedules already existed on target provider",
       );
     }
 
     this.logger.info(
-      { copiedCount: targetSchedules.length, conflicts: conflicts.length },
+      { copiedCount: targetSchedules.length, warnings: warnings.length },
       "Schedule copied",
     );
 
-    return targetSchedules;
+    return { schedules: targetSchedules, warnings };
   }
 }
