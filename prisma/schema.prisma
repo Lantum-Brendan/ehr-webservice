@@ -32,14 +32,18 @@ model Patient {
 }
 
 model Encounter {
-  id           String   @id @default(uuid())
-  patientId    String
-  patient      Patient  @relation(fields: [patientId], references: [id])
-  encounterType String
-  startTime    DateTime
-  endTime      DateTime?
-  status       String   @default("planned")
-  createdAt    DateTime @default(now())
+  id             String   @id @default(uuid())
+  patientId      String
+  patient        Patient  @relation(fields: [patientId], references: [id])
+  appointmentId  String?
+  appointment    Appointment? @relation(fields: [appointmentId], references: [id])
+  providerId     String?
+  provider       Provider? @relation(fields: [providerId], references: [id])
+  encounterType  String
+  startTime      DateTime
+  endTime        DateTime?
+  status         String   @default("planned")
+  createdAt      DateTime @default(now())
 
   @@map("encounters")
 }
@@ -80,6 +84,7 @@ model Provider {
   createdAt     DateTime @default(now())
   
   appointments  Appointment[]
+  encounters    Encounter[]
   schedules     ProviderSchedule[]
   scheduleBlocks ScheduleBlock[]
   
@@ -161,6 +166,8 @@ model Appointment {
   cancelledAt    DateTime?
   cancelledBy    String?
   cancelledReason String?
+  
+  encounters    Encounter[]
   
   @@map("appointments")
 }

@@ -104,7 +104,7 @@ export class GetAvailableSlotsUseCase {
           allSlots.push({ start: slotStart, end: slotEnd });
         }
 
-        slotStart = new Date(slotEnd.getTime());
+        slotStart = slotEnd;
       }
     }
 

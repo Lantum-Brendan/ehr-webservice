@@ -1,18 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type IAppointmentRepository } from "../domain/appointmentRepository.js";
+import { type IEncounterRepository } from "@domains/encounter/domain/encounterRepository.js";
 import { type IEventBus } from "@shared/event-bus/event-bus.interface.js";
 import { type Logger } from "@shared/logger/index.js";
 import { ConflictError, NotFoundError } from "@core/errors/appError.js";
 import { Appointment } from "../domain/appointmentEntity.js";
+import { Encounter } from "@domains/encounter/domain/encounterEntity.js";
 
-vi.mock("@infrastructure/database/prisma.client.js", () => ({
-  prisma: {
-    appointmentType: { findUnique: vi.fn() },
-    encounter: { create: vi.fn() },
-  },
-}));
-
-const { prisma } = await import("@infrastructure/database/prisma.client.js");
 const { CheckInAppointmentUseCase } =
   await import("./checkInAppointmentUseCase.js");
 
@@ -23,6 +17,16 @@ const mockAppointmentRepo: Partial<IAppointmentRepository> = {
   findByDateRange: vi.fn(),
   findByProviderAndDateRange: vi.fn(),
   findOverlappingForProvider: vi.fn(),
+  save: vi.fn(),
+  delete: vi.fn(),
+};
+
+const mockEncounterRepo: Partial<IEncounterRepository> = {
+  findById: vi.fn(),
+  findByPatientId: vi.fn(),
+  findByProviderId: vi.fn(),
+  findByDateRange: vi.fn(),
+  findByAppointmentId: vi.fn(),
   save: vi.fn(),
   delete: vi.fn(),
 };
@@ -109,25 +113,10 @@ describe("CheckInAppointmentUseCase", () => {
     (
       mockAppointmentRepo.findById as ReturnType<typeof vi.fn>
     ).mockResolvedValue(appointment);
-    (
-      prisma.appointmentType.findUnique as ReturnType<typeof vi.fn>
-    ).mockResolvedValue({
-      id: "type-1",
-      name: "Checkup",
-      defaultDurationMinutes: 30,
-      isActive: true,
-    });
-    (prisma.encounter.create as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: "encounter-1",
-      patientId: "patient-1",
-      encounterType: "outpatient",
-      startTime: new Date(),
-      endTime: null,
-      status: "arrived",
-    });
 
     const useCase = new CheckInAppointmentUseCase(
       mockAppointmentRepo as IAppointmentRepository,
+      mockEncounterRepo as IEncounterRepository,
       mockEventBus as IEventBus,
       mockLogger as Logger,
     );
@@ -136,7 +125,7 @@ describe("CheckInAppointmentUseCase", () => {
 
     expect(result.status).toBe("CHECKED_IN");
     expect(mockAppointmentRepo.save).toHaveBeenCalledWith(result);
-    expect(prisma.encounter.create).toHaveBeenCalled();
+    expect(mockEncounterRepo.save).toHaveBeenCalled();
     expect(mockEventBus.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "AppointmentCheckedIn",
@@ -154,25 +143,10 @@ describe("CheckInAppointmentUseCase", () => {
     (
       mockAppointmentRepo.findById as ReturnType<typeof vi.fn>
     ).mockResolvedValue(appointment);
-    (
-      prisma.appointmentType.findUnique as ReturnType<typeof vi.fn>
-    ).mockResolvedValue({
-      id: "type-1",
-      name: "Checkup",
-      defaultDurationMinutes: 30,
-      isActive: true,
-    });
-    (prisma.encounter.create as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: "encounter-1",
-      patientId: "patient-1",
-      encounterType: "outpatient",
-      startTime: new Date(),
-      endTime: null,
-      status: "arrived",
-    });
 
     const useCase = new CheckInAppointmentUseCase(
       mockAppointmentRepo as IAppointmentRepository,
+      mockEncounterRepo as IEncounterRepository,
       mockEventBus as IEventBus,
       mockLogger as Logger,
     );
@@ -180,7 +154,7 @@ describe("CheckInAppointmentUseCase", () => {
     const result = await useCase.execute("appointment-1");
 
     expect(result.status).toBe("CHECKED_IN");
-    expect(prisma.encounter.create).toHaveBeenCalled();
+    expect(mockEncounterRepo.save).toHaveBeenCalled();
   });
 
   it("throws NotFoundError when appointment does not exist", async () => {
@@ -190,13 +164,14 @@ describe("CheckInAppointmentUseCase", () => {
 
     const useCase = new CheckInAppointmentUseCase(
       mockAppointmentRepo as IAppointmentRepository,
+      mockEncounterRepo as IEncounterRepository,
       mockEventBus as IEventBus,
       mockLogger as Logger,
     );
 
     await expect(useCase.execute("nonexistent")).rejects.toThrow(NotFoundError);
     expect(mockAppointmentRepo.save).not.toHaveBeenCalled();
-    expect(prisma.encounter.create).not.toHaveBeenCalled();
+    expect(mockEncounterRepo.save).not.toHaveBeenCalled();
   });
 
   it("throws ConflictError when appointment is already checked in", async () => {
@@ -207,6 +182,7 @@ describe("CheckInAppointmentUseCase", () => {
 
     const useCase = new CheckInAppointmentUseCase(
       mockAppointmentRepo as IAppointmentRepository,
+      mockEncounterRepo as IEncounterRepository,
       mockEventBus as IEventBus,
       mockLogger as Logger,
     );
@@ -215,7 +191,7 @@ describe("CheckInAppointmentUseCase", () => {
       ConflictError,
     );
     expect(mockAppointmentRepo.save).not.toHaveBeenCalled();
-    expect(prisma.encounter.create).not.toHaveBeenCalled();
+    expect(mockEncounterRepo.save).not.toHaveBeenCalled();
   });
 
   it("throws ConflictError when appointment is completed", async () => {
@@ -240,6 +216,7 @@ describe("CheckInAppointmentUseCase", () => {
 
     const useCase = new CheckInAppointmentUseCase(
       mockAppointmentRepo as IAppointmentRepository,
+      mockEncounterRepo as IEncounterRepository,
       mockEventBus as IEventBus,
       mockLogger as Logger,
     );
@@ -247,7 +224,7 @@ describe("CheckInAppointmentUseCase", () => {
     await expect(useCase.execute("appointment-1")).rejects.toThrow(
       ConflictError,
     );
-    expect(prisma.encounter.create).not.toHaveBeenCalled();
+    expect(mockEncounterRepo.save).not.toHaveBeenCalled();
   });
 
   it("throws ConflictError when appointment is cancelled", async () => {
@@ -272,6 +249,7 @@ describe("CheckInAppointmentUseCase", () => {
 
     const useCase = new CheckInAppointmentUseCase(
       mockAppointmentRepo as IAppointmentRepository,
+      mockEncounterRepo as IEncounterRepository,
       mockEventBus as IEventBus,
       mockLogger as Logger,
     );
@@ -279,7 +257,7 @@ describe("CheckInAppointmentUseCase", () => {
     await expect(useCase.execute("appointment-1")).rejects.toThrow(
       ConflictError,
     );
-    expect(prisma.encounter.create).not.toHaveBeenCalled();
+    expect(mockEncounterRepo.save).not.toHaveBeenCalled();
   });
 
   it("creates encounter with correct patient and encounter type", async () => {
@@ -287,39 +265,26 @@ describe("CheckInAppointmentUseCase", () => {
     (
       mockAppointmentRepo.findById as ReturnType<typeof vi.fn>
     ).mockResolvedValue(appointment);
-    (
-      prisma.appointmentType.findUnique as ReturnType<typeof vi.fn>
-    ).mockResolvedValue({
-      id: "type-1",
-      name: "Checkup",
-      defaultDurationMinutes: 30,
-      isActive: true,
-    });
-    (prisma.encounter.create as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: "encounter-1",
-      patientId: "patient-1",
-      encounterType: "outpatient",
-      startTime: new Date(),
-      endTime: null,
-      status: "arrived",
-    });
+
+    let savedEncounter: Encounter | undefined;
+    (mockEncounterRepo.save as ReturnType<typeof vi.fn>).mockImplementation(
+      async (encounter: Encounter) => {
+        savedEncounter = encounter;
+      },
+    );
 
     const useCase = new CheckInAppointmentUseCase(
       mockAppointmentRepo as IAppointmentRepository,
+      mockEncounterRepo as IEncounterRepository,
       mockEventBus as IEventBus,
       mockLogger as Logger,
     );
 
     await useCase.execute("appointment-1");
 
-    expect(prisma.encounter.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          patientId: "patient-1",
-          encounterType: "outpatient",
-          status: "arrived",
-        }),
-      }),
-    );
+    expect(mockEncounterRepo.save).toHaveBeenCalled();
+    expect(savedEncounter?.patientId).toBe("patient-1");
+    expect(savedEncounter?.encounterTypeValue).toBe("outpatient");
+    expect(savedEncounter?.statusValue).toBe("arrived");
   });
 });

@@ -42,7 +42,9 @@ const mockAppointmentRepo: IAppointmentRepository = {
   findByDateRange: vi.fn(),
   findByProviderAndDateRange: vi.fn(),
   findOverlappingForProvider: vi.fn(),
-  withSerializableTransaction: vi.fn(),
+  withSerializableTransaction: vi.fn(async (operation) =>
+    operation(mockAppointmentRepo),
+  ),
   save: vi.fn(),
   delete: vi.fn(),
 };
@@ -507,6 +509,17 @@ describe("CreateAppointmentUseCase", () => {
         patientSelfBookingEnabled: false,
         maxAdvanceBookingDays: 30,
       });
+      (
+        mockScheduleRepo.findByProviderAndDay as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([makeMondaySchedule("09:00", "17:00")]);
+      (
+        mockBlockRepo.findByProviderAndDateRange as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([]);
+      (
+        mockAppointmentRepo.findOverlappingForProvider as ReturnType<
+          typeof vi.fn
+        >
+      ).mockResolvedValue([]);
 
       const useCase = new CreateAppointmentUseCase(
         mockAppointmentRepo,
@@ -556,6 +569,12 @@ describe("CreateAppointmentUseCase", () => {
         patientSelfBookingEnabled: true,
         maxAdvanceBookingDays: 30,
       });
+      (
+        mockScheduleRepo.findByProviderAndDay as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([makeMondaySchedule("09:00", "17:00")]);
+      (
+        mockBlockRepo.findByProviderAndDateRange as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([]);
 
       const useCase = new CreateAppointmentUseCase(
         mockAppointmentRepo,
@@ -605,6 +624,12 @@ describe("CreateAppointmentUseCase", () => {
         patientSelfBookingEnabled: true,
         maxAdvanceBookingDays: 30,
       });
+      (
+        mockScheduleRepo.findByProviderAndDay as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([makeMondaySchedule("09:00", "17:00")]);
+      (
+        mockBlockRepo.findByProviderAndDateRange as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([]);
 
       const useCase = new CreateAppointmentUseCase(
         mockAppointmentRepo,
@@ -753,7 +778,7 @@ describe("CreateAppointmentUseCase", () => {
       ).mockResolvedValue({
         appointmentBufferMinutes: 0,
         patientSelfBookingEnabled: true,
-        maxAdvanceBookingDays: 30,
+        maxAdvanceBookingDays: 36500,
       });
       (
         mockScheduleRepo.findByProviderAndDay as ReturnType<typeof vi.fn>
@@ -776,15 +801,11 @@ describe("CreateAppointmentUseCase", () => {
         mockLogger as Logger,
       );
 
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(10, 0, 0, 0);
-
       const result = await useCase.execute({
         patientId: "patient-1",
         providerId: "provider-1",
         appointmentTypeId: "type-1",
-        scheduledStart: tomorrow.toISOString(),
+        scheduledStart: "2099-06-15T10:00:00.000Z",
         isSelfBooking: true,
       });
 

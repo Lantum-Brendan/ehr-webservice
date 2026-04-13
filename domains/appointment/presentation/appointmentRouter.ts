@@ -12,6 +12,7 @@ import { GetAvailableSlotsUseCase } from "../application/getAvailableSlotsUseCas
 import { PrismaAppointmentRepository } from "../infrastructure/prismaAppointmentRepository.js";
 import { PrismaProviderScheduleRepository } from "../infrastructure/prismaProviderScheduleRepository.js";
 import { PrismaScheduleBlockRepository } from "../infrastructure/prismaScheduleBlockRepository.js";
+import { PrismaEncounterRepository } from "@domains/encounter/infrastructure/prismaEncounterRepository.js";
 import { Appointment } from "../domain/appointmentEntity.js";
 import { PrismaPatientRepository } from "@domains/patient/infrastructure/prismaPatientRepository.js";
 import { InMemoryEventBus } from "@shared/event-bus/event-bus.interface.js";
@@ -71,12 +72,11 @@ const patientRepo = new PrismaPatientRepository();
 const eventBus = new InMemoryEventBus();
 const scheduleRepo = new PrismaProviderScheduleRepository();
 const blockRepo = new PrismaScheduleBlockRepository();
+const encounterRepo = new PrismaEncounterRepository();
 
-const createAppointmentUseCase = new CreateAppointmentUseCase(
+const checkInAppointmentUseCase = new CheckInAppointmentUseCase(
   appointmentRepo,
-  patientRepo,
-  scheduleRepo,
-  blockRepo,
+  encounterRepo,
   eventBus,
   logger,
 );
@@ -90,12 +90,6 @@ const updateAppointmentUseCase = new UpdateAppointmentUseCase(
 );
 
 const cancelAppointmentUseCase = new CancelAppointmentUseCase(
-  appointmentRepo,
-  eventBus,
-  logger,
-);
-
-const checkInAppointmentUseCase = new CheckInAppointmentUseCase(
   appointmentRepo,
   eventBus,
   logger,

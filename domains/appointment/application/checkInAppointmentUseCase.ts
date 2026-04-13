@@ -1,14 +1,15 @@
 import { Appointment } from "../domain/appointmentEntity.js";
 import { IAppointmentRepository } from "../domain/appointmentRepository.js";
+import { type IEncounterRepository } from "@domains/encounter/domain/encounterRepository.js";
 import { IEventBus } from "@shared/event-bus/event-bus.interface.js";
 import { type Logger } from "@shared/logger/index.js";
 import { NotFoundError, ConflictError } from "@core/errors/appError.js";
 import { Encounter } from "@domains/encounter/domain/encounterEntity.js";
-import { prisma } from "@infrastructure/database/prisma.client.js";
 
 export class CheckInAppointmentUseCase {
   constructor(
     private readonly appointmentRepo: IAppointmentRepository,
+    private readonly encounterRepo: IEncounterRepository,
     private readonly eventBus: IEventBus,
     private readonly logger: Logger,
   ) {}
@@ -34,10 +35,6 @@ export class CheckInAppointmentUseCase {
     appointment.checkIn();
     await this.appointmentRepo.save(appointment);
 
-    const typeRecord = await prisma.appointmentType.findUnique({
-      where: { id: appointment.appointmentTypeId },
-    });
-
     const encounter = Encounter.create({
       patientId: appointment.patientId,
       encounterType: "outpatient",
@@ -45,16 +42,7 @@ export class CheckInAppointmentUseCase {
       status: "arrived",
     });
 
-    await prisma.encounter.create({
-      data: {
-        id: encounter.id,
-        patientId: encounter.patientId,
-        encounterType: encounter.encounterTypeValue,
-        startTime: encounter.startTimeValue,
-        endTime: encounter.endTimeValue,
-        status: encounter.statusValue,
-      },
-    });
+    await this.encounterRepo.save(encounter);
 
     await this.eventBus.publish({
       type: "AppointmentCheckedIn",
