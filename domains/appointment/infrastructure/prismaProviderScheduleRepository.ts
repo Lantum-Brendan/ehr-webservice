@@ -3,6 +3,19 @@ import type { IProviderScheduleRepository } from "../domain/scheduleRepository.j
 import { prisma } from "@infrastructure/database/prisma.client.js";
 
 export class PrismaProviderScheduleRepository implements IProviderScheduleRepository {
+  async findById(id: string): Promise<ProviderSchedule | null> {
+    const record = await prisma.providerSchedule.findUnique({ where: { id } });
+    if (!record) return null;
+    return ProviderSchedule.rehydrate({
+      id: record.id,
+      providerId: record.providerId,
+      dayOfWeek: record.dayOfWeek,
+      startTime: record.startTime,
+      endTime: record.endTime,
+      isActive: record.isActive,
+    });
+  }
+
   async findByProviderId(providerId: string): Promise<ProviderSchedule[]> {
     const records = await prisma.providerSchedule.findMany({
       where: { providerId },
@@ -40,5 +53,36 @@ export class PrismaProviderScheduleRepository implements IProviderScheduleReposi
         isActive: record.isActive,
       }),
     );
+  }
+
+  async save(schedule: ProviderSchedule): Promise<void> {
+    const data = {
+      id: schedule.id,
+      providerId: schedule.providerId,
+      dayOfWeek: schedule.dayOfWeek,
+      startTime: schedule.startTime,
+      endTime: schedule.endTime,
+      isActive: schedule.isActive,
+    };
+
+    await prisma.providerSchedule.upsert({
+      where: { id: schedule.id },
+      update: data,
+      create: data,
+    });
+  }
+
+  async delete(id: string): Promise<void> {
+    await prisma.providerSchedule.delete({ where: { id } });
+  }
+
+  async deleteByProviderAndDayOfWeek(
+    providerId: string,
+    dayOfWeek: number,
+  ): Promise<number> {
+    const result = await prisma.providerSchedule.deleteMany({
+      where: { providerId, dayOfWeek },
+    });
+    return result.count;
   }
 }

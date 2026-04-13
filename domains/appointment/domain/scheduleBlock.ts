@@ -22,6 +22,7 @@ export class ScheduleBlock {
   }
 
   static create(props: {
+    id?: string;
     providerId: string;
     startDateTime: Date | string;
     endDateTime: Date | string;
@@ -53,7 +54,7 @@ export class ScheduleBlock {
     }
 
     return new ScheduleBlock(
-      uuidv4(),
+      props.id ?? uuidv4(),
       props.providerId,
       startDateTime,
       endDateTime,
