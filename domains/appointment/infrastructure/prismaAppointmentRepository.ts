@@ -37,9 +37,7 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
     });
   }
 
-  private isRootClient(): this is {
-    db: PrismaClient;
-  } {
+  private isRootClient(): this is { db: PrismaClient } {
     return "$transaction" in this.db;
   }
 
@@ -141,8 +139,10 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await this.db.$transaction(
-          async (tx) => operation(new PrismaAppointmentRepository(tx)),
+        if (!this.isRootClient()) throw new Error("Cannot start a transaction from within a transaction");
+return await (this.db as PrismaClient).$transaction(
+          async (tx: Prisma.TransactionClient) =>
+            operation(new PrismaAppointmentRepository(tx)),
           {
             isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
           },

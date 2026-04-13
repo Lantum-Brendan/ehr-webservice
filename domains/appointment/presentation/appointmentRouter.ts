@@ -74,6 +74,15 @@ const scheduleRepo = new PrismaProviderScheduleRepository();
 const blockRepo = new PrismaScheduleBlockRepository();
 const encounterRepo = new PrismaEncounterRepository();
 
+const createAppointmentUseCase = new CreateAppointmentUseCase(
+  appointmentRepo,
+  patientRepo,
+  scheduleRepo,
+  blockRepo,
+  eventBus,
+  logger,
+);
+
 const checkInAppointmentUseCase = new CheckInAppointmentUseCase(
   appointmentRepo,
   encounterRepo,
