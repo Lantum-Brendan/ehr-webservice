@@ -139,7 +139,8 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await (this.db as PrismaClient).$transaction(
+        if (!this.isRootClient()) throw new Error("Cannot start a transaction from within a transaction");
+return await (this.db as PrismaClient).$transaction(
           async (tx: Prisma.TransactionClient) =>
             operation(new PrismaAppointmentRepository(tx)),
           {
