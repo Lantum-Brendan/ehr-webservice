@@ -195,7 +195,7 @@ export class ClinicalNote {
     this._updatedAt = new Date();
   }
 
-  toJSON() {
+  toJSON(): Record<string, unknown> {
     return {
       id: this.id,
       encounterId: this.encounterId,

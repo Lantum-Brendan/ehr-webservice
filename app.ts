@@ -4,8 +4,8 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 
 // Core components (will create these next)
-import { requestIdMiddleware } from "./core/middleware/request-id.middleware.js";
-import { auditMiddleware } from "./core/middleware/audit.middleware.js";
+import { requestIdMiddleware } from "./core/middleware/requestIdMiddleware.js";
+import { auditMiddleware } from "./core/middleware/auditMiddleware.js";
 import { errorHandler } from "./core/errors/error-handler.js";
 import { config } from "./core/config/index.js";
 

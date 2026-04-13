@@ -3,11 +3,7 @@ import { type IClinicalNoteRepository } from "../domain/clinicalNoteRepository.j
 import { type IEncounterRepository } from "@domains/encounter/domain/encounterRepository.js";
 import { IEventBus } from "@shared/event-bus/event-bus.interface.js";
 import { type Logger } from "@shared/logger/index.js";
-import {
-  NotFoundError,
-  ForbiddenError,
-  BadRequestError,
-} from "@core/errors/appError.js";
+import { NotFoundError, BadRequestError } from "@core/errors/appError.js";
 
 interface CreateClinicalNoteInput {
   encounterId: string;

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireRole } from "@core/guards/roleGuard.js";
-import { ForbiddenError, NotFoundError } from "@core/errors/appError.js";
+import { ForbiddenError } from "@core/errors/appError.js";
 import { CreateClinicalNoteUseCase } from "../application/createClinicalNoteUseCase.js";
 import { SignClinicalNoteUseCase } from "../application/signClinicalNoteUseCase.js";
 import { UpdateClinicalNoteUseCase } from "../application/updateClinicalNoteUseCase.js";
@@ -148,9 +148,10 @@ clinicalNoteRouter.get(
       const note = await getClinicalNoteUseCase.execute(req.params.id);
       const isPatientUser = req.user?.roles?.includes("patient") ?? false;
 
-      if (isPatientUser && !note.isSigned()) {
-        res.status(403).json({ error: { message: "Access denied" } });
-        return;
+      if (isPatientUser) {
+        if (!note.isSigned() || note.patientId !== req.user?.id) {
+          throw new ForbiddenError("Access denied");
+        }
       }
 
       res.json(note.toJSON());
@@ -186,8 +187,7 @@ clinicalNoteRouter.get(
       let notes;
       if (isPatientUser) {
         if (req.user?.id !== req.params.patientId) {
-          res.status(403).json({ error: { message: "Access denied" } });
-          return;
+          throw new ForbiddenError("Access denied");
         }
         notes = await getSignedClinicalNotesForPatientUseCase.execute(
           req.params.patientId,
