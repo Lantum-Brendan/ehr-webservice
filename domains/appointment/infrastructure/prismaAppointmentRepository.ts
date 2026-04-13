@@ -37,7 +37,7 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
     });
   }
 
-  private isRootClient(): boolean {
+  private isRootClient(): this is { db: PrismaClient } {
     return "$transaction" in this.db;
   }
 
