@@ -81,13 +81,14 @@ export class PrismaScheduleBlockRepository implements IScheduleBlockRepository {
     providerId: string,
     startDate: Date,
     endDate: Date,
-  ): Promise<void> {
-    await prisma.scheduleBlock.deleteMany({
+  ): Promise<number> {
+    const result = await prisma.scheduleBlock.deleteMany({
       where: {
         providerId,
         startDateTime: { lt: endDate },
         endDateTime: { gt: startDate },
       },
     });
+    return result.count;
   }
 }

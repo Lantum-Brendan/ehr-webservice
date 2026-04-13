@@ -77,8 +77,8 @@ const copyWeekScheduleUseCase = new CopyWeekScheduleUseCase(
 );
 
 const createBlockUseCase = new CreateBlockUseCase(
-  scheduleRepo,
   blockRepo,
+  scheduleRepo,
   logger,
 );
 const updateBlockUseCase = new UpdateBlockUseCase(blockRepo, logger);

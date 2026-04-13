@@ -221,27 +221,25 @@ export class ClearRangeUseCase {
     const end = new Date(endDate);
     end.setHours(23, 59, 59, 999);
 
+    const uniqueDays = new Set<number>();
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const dayOfWeek = d.getDay();
-
-      for (const schedule of schedules) {
-        if (schedule.dayOfWeek === dayOfWeek) {
-          await this.scheduleRepo.delete(schedule.id);
-          schedulesDeleted++;
-        }
-      }
+      uniqueDays.add(d.getDay());
     }
 
-    const blocks = await this.blockRepo.findByProviderAndDateRange(
+    let schedulesDeleted = 0;
+    for (const dayOfWeek of uniqueDays) {
+      const count = await this.scheduleRepo.deleteByProviderAndDayOfWeek(
+        providerId,
+        dayOfWeek,
+      );
+      schedulesDeleted += count;
+    }
+
+    const blocksDeleted = await this.blockRepo.deleteByProviderAndDateRange(
       providerId,
       start,
       end,
     );
-    const blocksDeleted = blocks.length;
-
-    for (const block of blocks) {
-      await this.blockRepo.delete(block.id);
-    }
 
     this.logger.info(
       { schedulesDeleted, blocksDeleted },

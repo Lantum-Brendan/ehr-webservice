@@ -75,4 +75,14 @@ export class PrismaProviderScheduleRepository implements IProviderScheduleReposi
   async delete(id: string): Promise<void> {
     await prisma.providerSchedule.delete({ where: { id } });
   }
+
+  async deleteByProviderAndDayOfWeek(
+    providerId: string,
+    dayOfWeek: number,
+  ): Promise<number> {
+    const result = await prisma.providerSchedule.deleteMany({
+      where: { providerId, dayOfWeek },
+    });
+    return result.count;
+  }
 }

@@ -10,6 +10,10 @@ export interface IProviderScheduleRepository {
   ): Promise<ProviderSchedule[]>;
   save(schedule: ProviderSchedule): Promise<void>;
   delete(id: string): Promise<void>;
+  deleteByProviderAndDayOfWeek(
+    providerId: string,
+    dayOfWeek: number,
+  ): Promise<number>;
 }
 
 export interface IScheduleBlockRepository {
@@ -26,5 +30,5 @@ export interface IScheduleBlockRepository {
     providerId: string,
     startDate: Date,
     endDate: Date,
-  ): Promise<void>;
+  ): Promise<number>;
 }
