@@ -111,14 +111,11 @@ scheduleRouter.get(
   requireRole("admin", "reception", "clinician"),
   async (req, res, next) => {
     try {
-      const isOwnData = req.params.providerId === req.user?.id;
-      const isAdminOrReception =
-        req.user?.roles?.includes("admin") ||
-        req.user?.roles?.includes("reception");
-
-      if (!isOwnData && !isAdminOrReception) {
-        throw new ForbiddenError("You can only view your own schedule");
-      }
+      assertProviderOwnsData(
+        req.params.providerId,
+        req.user?.id ?? "",
+        req.user?.roles ?? [],
+      );
 
       const schedules = await getSchedulesForProviderUseCase.execute(
         req.params.providerId,
@@ -247,14 +244,11 @@ scheduleRouter.get(
   requireRole("admin", "reception", "clinician"),
   async (req, res, next) => {
     try {
-      const isOwnData = req.params.providerId === req.user?.id;
-      const isAdminOrReception =
-        req.user?.roles?.includes("admin") ||
-        req.user?.roles?.includes("reception");
-
-      if (!isOwnData && !isAdminOrReception) {
-        throw new ForbiddenError("You can only view your own blocks");
-      }
+      assertProviderOwnsData(
+        req.params.providerId,
+        req.user?.id ?? "",
+        req.user?.roles ?? [],
+      );
 
       const blocks = await getBlocksForProviderUseCase.execute(
         req.params.providerId,
