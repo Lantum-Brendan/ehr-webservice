@@ -19,25 +19,30 @@ export const authorizePatientAccess = (
       }
 
       const user = req.user;
-      const isClinicianOrAdmin = user.roles.some(
-        (r) => r === "clinician" || r === "admin",
+      const isPrivilegedUser = user.roles.some(
+        (r) => r === "clinician" || r === "admin" || r === "billing",
       );
 
-      if (isClinicianOrAdmin) {
+      if (isPrivilegedUser) {
         next();
         return;
       }
 
-      if (options.requireOwnership && user.patientId) {
-        const requestedPatientId = req.params.id || req.body?.patientId;
+      const isPatientUser = user.roles.includes("patient");
+      if (!isPatientUser) {
+        throw new ForbiddenError("Insufficient permissions");
+      }
 
-        if (requestedPatientId && requestedPatientId !== user.patientId) {
-          throw new ForbiddenError("Cannot access other patient's data");
-        }
+      if (!options.requireOwnership) {
+        next();
+        return;
+      }
 
-        if (requestedPatientId !== user.patientId) {
-          throw new ForbiddenError("Cannot access this patient record");
-        }
+      const actorPatientId = user.patientId ?? user.id;
+      const requestedPatientId = req.params.id || req.body?.patientId;
+
+      if (!requestedPatientId || requestedPatientId !== actorPatientId) {
+        throw new ForbiddenError("Cannot access other patient's data");
       }
 
       next();

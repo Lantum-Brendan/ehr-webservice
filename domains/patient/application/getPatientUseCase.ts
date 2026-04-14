@@ -9,7 +9,7 @@ export class GetPatientUseCase {
     private readonly logger: Logger,
   ) {}
 
-  async execute(patientId: string): Promise<Patient | null> {
+  async execute(patientId: string): Promise<Patient> {
     this.logger.info({ patientId }, "Fetching patient");
 
     const patient = await this.patientRepo.findById(patientId);

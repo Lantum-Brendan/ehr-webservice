@@ -9,22 +9,10 @@ import { DeletePatientUseCase } from "../application/deletePatientUseCase.js";
 import { GetPatientUseCase } from "../application/getPatientUseCase.js";
 import { PrismaPatientRepository } from "../infrastructure/prismaPatientRepository.js";
 import { logger } from "@shared/logger/index.js";
-
-class MockEventBus {
-  publish(): Promise<void> {
-    return Promise.resolve();
-  }
-  subscribe(): () => void {
-    return () => {};
-  }
-  subscribeAll(): () => void {
-    return () => {};
-  }
-  clear(): void {}
-}
+import { InMemoryEventBus } from "@shared/event-bus/event-bus.interface.js";
 
 const patientRepo = new PrismaPatientRepository();
-const eventBus = new MockEventBus();
+const eventBus = new InMemoryEventBus();
 
 const createPatientUseCase = new CreatePatientUseCase(
   patientRepo,
@@ -71,6 +59,27 @@ const updatePatientSchema = z
   );
 
 export const patientRouter = Router();
+const patientIdParamsSchema = z.object({
+  id: z.string().uuid("Invalid patient ID"),
+});
+
+function toPatientDto(patient: {
+  id: string;
+  mrn: string;
+  firstNameValue: string;
+  lastNameValue: string;
+  dateOfBirthValue: Date;
+  age: number;
+}) {
+  return {
+    id: patient.id,
+    mrn: patient.mrn,
+    firstName: patient.firstNameValue,
+    lastName: patient.lastNameValue,
+    dateOfBirth: patient.dateOfBirthValue.toISOString().split("T")[0],
+    age: patient.age,
+  };
+}
 
 patientRouter.post(
   "/",
@@ -79,14 +88,7 @@ patientRouter.post(
   async (req, res, next) => {
     try {
       const patient = await createPatientUseCase.execute(req.body);
-      res.status(201).json({
-        id: patient.id,
-        mrn: patient.mrn,
-        firstName: patient.firstNameValue,
-        lastName: patient.lastNameValue,
-        dateOfBirth: patient.dateOfBirthValue.toISOString().split("T")[0],
-        age: patient.age,
-      });
+      res.status(201).json(toPatientDto(patient));
     } catch (error) {
       next(error);
     }
@@ -100,14 +102,7 @@ patientRouter.get(
     try {
       const patients = await patientRepo.findAll();
       res.json({
-        patients: patients.map((p) => ({
-          id: p.id,
-          mrn: p.mrn,
-          firstName: p.firstNameValue,
-          lastName: p.lastNameValue,
-          dateOfBirth: p.dateOfBirthValue.toISOString().split("T")[0],
-          age: p.age,
-        })),
+        patients: patients.map(toPatientDto),
       });
     } catch (error) {
       next(error);
@@ -117,24 +112,13 @@ patientRouter.get(
 
 patientRouter.get(
   "/:id",
-  requireRole("clinician", "admin", "billing"),
+  requireRole("clinician", "admin", "billing", "patient"),
   authorizePatientAccess({ requireOwnership: true }),
-  validate({ params: z.object({ id: z.string() }) }),
+  validate({ params: patientIdParamsSchema }),
   async (req, res, next) => {
     try {
       const patient = await getPatientUseCase.execute(req.params.id);
-      if (!patient) {
-        res.status(404).json({ error: { message: "Patient not found" } });
-        return;
-      }
-      res.json({
-        id: patient.id,
-        mrn: patient.mrn,
-        firstName: patient.firstNameValue,
-        lastName: patient.lastNameValue,
-        dateOfBirth: patient.dateOfBirthValue.toISOString().split("T")[0],
-        age: patient.age,
-      });
+      res.json(toPatientDto(patient));
     } catch (error) {
       next(error);
     }
@@ -144,8 +128,7 @@ patientRouter.get(
 patientRouter.put(
   "/:id",
   requireRole("clinician", "admin"),
-  authorizePatientAccess({ requireOwnership: true }),
-  validate({ params: z.object({ id: z.string() }) }),
+  validate({ params: patientIdParamsSchema }),
   validate({ body: updatePatientSchema }),
   async (req, res, next) => {
     try {
@@ -153,14 +136,7 @@ patientRouter.put(
         req.params.id,
         req.body,
       );
-      res.json({
-        id: patient.id,
-        mrn: patient.mrn,
-        firstName: patient.firstNameValue,
-        lastName: patient.lastNameValue,
-        dateOfBirth: patient.dateOfBirthValue.toISOString().split("T")[0],
-        age: patient.age,
-      });
+      res.json(toPatientDto(patient));
     } catch (error) {
       next(error);
     }
@@ -170,8 +146,7 @@ patientRouter.put(
 patientRouter.delete(
   "/:id",
   requireRole("clinician", "admin"),
-  authorizePatientAccess({ requireOwnership: true }),
-  validate({ params: z.object({ id: z.string() }) }),
+  validate({ params: patientIdParamsSchema }),
   async (req, res, next) => {
     try {
       await deletePatientUseCase.execute(req.params.id);
