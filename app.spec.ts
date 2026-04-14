@@ -15,9 +15,12 @@ const { appointmentRouter } = await import(
 const { encounterRouter } = await import(
   "./domains/encounter/presentation/encounterRouter.js"
 );
+const { fhirGatewayRouter } = await import(
+  "./domains/fhir-gateway/presentation/fhirGatewayRouter.js"
+);
 
 describe("createApp", () => {
-  it("mounts the appointment and encounter routers and advertises them in API metadata", async () => {
+  it("mounts the appointment, encounter, and fhir routers and advertises them in API metadata", async () => {
     const app = createApp();
     const routerStack = (app.router as { stack: any[] }).stack;
 
@@ -39,6 +42,15 @@ describe("createApp", () => {
     );
 
     expect(encounterLayer).toBeDefined();
+    const fhirLayer = routerStack.find(
+      (layer) =>
+        layer.handle === fhirGatewayRouter &&
+        layer.matchers?.some((matcher: (path: string) => unknown) =>
+          Boolean(matcher("/api/v1/fhir")),
+        ),
+    );
+
+    expect(fhirLayer).toBeDefined();
 
     const apiRootLayer = routerStack.find(
       (layer) => layer.route?.path === "/api/v1" && layer.route?.methods?.get,
@@ -58,6 +70,7 @@ describe("createApp", () => {
     expect(resState.body?.endpoints).toMatchObject({
       appointments: "/api/v1/appointments",
       encounters: "/api/v1/encounters",
+      fhir: "/api/v1/fhir",
       patients: "/api/v1/patients",
     });
   });

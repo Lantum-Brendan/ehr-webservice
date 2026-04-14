@@ -12,6 +12,7 @@ import { config } from "./core/config/index.js";
 // Domain routers
 import { appointmentRouter } from "./domains/appointment/presentation/appointmentRouter.js";
 import { encounterRouter } from "./domains/encounter/presentation/encounterRouter.js";
+import { fhirGatewayRouter } from "./domains/fhir-gateway/presentation/fhirGatewayRouter.js";
 import { clinicalNoteRouter } from "./domains/clinical-note/presentation/clinicalNoteRouter.js";
 import { scheduleRouter } from "./domains/appointment/presentation/scheduleRouter.js";
 import { billingRouter } from "./domains/billing/presentation/billingRouter.js";
@@ -66,6 +67,7 @@ export function createApp(): Express {
   // Domain routers
   app.use("/api/v1/appointments", appointmentRouter);
   app.use("/api/v1/encounters", encounterRouter);
+  app.use("/api/v1/fhir", fhirGatewayRouter);
   app.use("/api/v1/clinical-notes", clinicalNoteRouter);
   app.use("/api/v1/schedules", scheduleRouter);
   app.use("/api/v1/billing", billingRouter);
@@ -81,6 +83,7 @@ export function createApp(): Express {
         health: "/health",
         appointments: "/api/v1/appointments",
         encounters: "/api/v1/encounters",
+        fhir: "/api/v1/fhir",
         patients: "/api/v1/patients",
       },
     });

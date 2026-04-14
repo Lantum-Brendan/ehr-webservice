@@ -6,6 +6,7 @@ const BILLING_PATHS = ["/invoices", "/payments", "/line-items"];
 const PATIENT_PATHS = ["/patients"];
 const APPOINTMENT_PATHS = ["/appointments", "/schedules"];
 const ENCOUNTER_PATHS = ["/encounters"];
+const FHIR_PATHS = ["/fhir"];
 
 function isBillingOperation(path: string): boolean {
   return BILLING_PATHS.some((p) => path.includes(p));
@@ -21,6 +22,10 @@ function isAppointmentOperation(path: string): boolean {
 
 function isEncounterOperation(path: string): boolean {
   return ENCOUNTER_PATHS.some((p) => path.includes(p));
+}
+
+function isFhirOperation(path: string): boolean {
+  return FHIR_PATHS.some((p) => path.includes(p));
 }
 
 function sanitizeForAudit(
@@ -63,6 +68,7 @@ export const auditMiddleware = (
   const isPatient = isPatientOperation(req.path);
   const isAppointment = isAppointmentOperation(req.path);
   const isEncounter = isEncounterOperation(req.path);
+  const isFhir = isFhirOperation(req.path);
   const actorPatientId =
     req.user?.patientId ||
     (req.user?.roles?.includes("patient") ? req.user?.id : undefined);
@@ -97,6 +103,9 @@ export const auditMiddleware = (
   } else if (isEncounter) {
     auditLog.query = req.query;
     auditLog.resourceType = "encounter";
+  } else if (isFhir) {
+    auditLog.query = req.query;
+    auditLog.resourceType = "fhir";
   } else {
     auditLog.query = req.query;
     auditLog.resourceType = req.body?.resourceType;
@@ -116,14 +125,16 @@ export const auditMiddleware = (
       success: res.statusCode >= 200 && res.statusCode < 300,
     };
 
-    if (isBilling || isPatient || isAppointment || isEncounter) {
+    if (isBilling || isPatient || isAppointment || isEncounter || isFhir) {
       completionLog.resourceType = isBilling
         ? "billing"
         : isPatient
           ? "patient"
           : isAppointment
             ? "appointment"
-            : "encounter";
+            : isEncounter
+              ? "encounter"
+              : "fhir";
       completionLog.patientId = patientId;
     }
 
