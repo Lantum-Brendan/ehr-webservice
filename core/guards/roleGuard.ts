@@ -4,6 +4,7 @@ import { ForbiddenError } from "../errors/appError.js";
 export interface UserInfo {
   id: string;
   roles: string[];
+  patientId?: string; // For patient self-service access
   // Add other user properties as needed (permissions, orgId, etc.)
 }
 
