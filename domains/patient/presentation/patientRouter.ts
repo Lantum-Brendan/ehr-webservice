@@ -2,30 +2,18 @@ import { Router } from "express";
 import { z } from "zod";
 import { validate } from "@core/middleware/validateMiddleware.js";
 import { requireRole } from "@core/guards/roleGuard.js";
+import { authorizePatientAccess } from "@core/guards/patientAuthGuard.js";
 import { CreatePatientUseCase } from "../application/createPatientUseCase.js";
 import { UpdatePatientUseCase } from "../application/updatePatientUseCase.js";
 import { DeletePatientUseCase } from "../application/deletePatientUseCase.js";
+import { GetPatientUseCase } from "../application/getPatientUseCase.js";
 import { PrismaPatientRepository } from "../infrastructure/prismaPatientRepository.js";
 import { logger } from "@shared/logger/index.js";
-import { IEventBus } from "@shared/event-bus/event-bus.interface.js";
+import { InMemoryEventBus } from "@shared/event-bus/event-bus.interface.js";
 
-// In-memory event bus implementation (would be injected in real app)
-class MockEventBus implements IEventBus {
-  publish(): Promise<void> {
-    return Promise.resolve();
-  }
-  subscribe(): () => void {
-    return () => {};
-  }
-  subscribeAll(): () => void {
-    return () => {};
-  }
-  clear(): void {}
-}
-
-// Dependency injection - in real app this would come from a module file
 const patientRepo = new PrismaPatientRepository();
-const eventBus = new MockEventBus();
+const eventBus = new InMemoryEventBus();
+
 const createPatientUseCase = new CreatePatientUseCase(
   patientRepo,
   eventBus,
@@ -41,8 +29,8 @@ const deletePatientUseCase = new DeletePatientUseCase(
   eventBus,
   logger,
 );
+const getPatientUseCase = new GetPatientUseCase(patientRepo, logger);
 
-// Zod validation schema for patient creation
 const createPatientSchema = z.object({
   mrn: z
     .string()
@@ -60,11 +48,10 @@ const createPatientSchema = z.object({
   ),
 });
 
-// Zod validation schema for patient update
 const updatePatientSchema = z
   .object({
-    firstName: z.string().min(1, "First name is required").optional(),
-    lastName: z.string().min(1, "Last name is required").optional(),
+    firstName: z.string().min(1).optional(),
+    lastName: z.string().min(1).optional(),
   })
   .refine(
     (data) => data.firstName !== undefined || data.lastName !== undefined,
@@ -72,46 +59,50 @@ const updatePatientSchema = z
   );
 
 export const patientRouter = Router();
+const patientIdParamsSchema = z.object({
+  id: z.string().uuid("Invalid patient ID"),
+});
 
-// POST /api/v1/patients - Create a new patient
+function toPatientDto(patient: {
+  id: string;
+  mrn: string;
+  firstNameValue: string;
+  lastNameValue: string;
+  dateOfBirthValue: Date;
+  age: number;
+}) {
+  return {
+    id: patient.id,
+    mrn: patient.mrn,
+    firstName: patient.firstNameValue,
+    lastName: patient.lastNameValue,
+    dateOfBirth: patient.dateOfBirthValue.toISOString().split("T")[0],
+    age: patient.age,
+  };
+}
+
 patientRouter.post(
   "/",
-  requireRole("clinician", "admin"), // Only clinicians and admins can create patients
+  requireRole("clinician", "admin"),
   validate({ body: createPatientSchema }),
   async (req, res, next) => {
     try {
       const patient = await createPatientUseCase.execute(req.body);
-      res.status(201).json({
-        id: patient.id,
-        mrn: patient.mrn,
-        firstName: patient.firstNameValue,
-        lastName: patient.lastNameValue,
-        dateOfBirth: patient.dateOfBirthValue.toISOString().split("T")[0],
-        age: patient.age,
-      });
+      res.status(201).json(toPatientDto(patient));
     } catch (error) {
       next(error);
     }
   },
 );
 
-// GET /api/v1/patients - List all patients (for demo/testing)
 patientRouter.get(
   "/",
   requireRole("clinician", "admin", "billing"),
   async (_req, res, next) => {
     try {
-      // This would normally come from a use case
       const patients = await patientRepo.findAll();
       res.json({
-        patients: patients.map((p) => ({
-          id: p.id,
-          mrn: p.mrn,
-          firstName: p.firstNameValue,
-          lastName: p.lastNameValue,
-          dateOfBirth: p.dateOfBirthValue.toISOString().split("T")[0],
-          age: p.age,
-        })),
+        patients: patients.map(toPatientDto),
       });
     } catch (error) {
       next(error);
@@ -119,38 +110,25 @@ patientRouter.get(
   },
 );
 
-// GET /api/v1/patients/:id - Get patient by ID
 patientRouter.get(
   "/:id",
-  requireRole("clinician", "admin", "billing"),
-  validate({ params: z.object({ id: z.string() }) }),
+  requireRole("clinician", "admin", "billing", "patient"),
+  authorizePatientAccess({ requireOwnership: true }),
+  validate({ params: patientIdParamsSchema }),
   async (req, res, next) => {
     try {
-      const patient = await patientRepo.findById(req.params.id);
-      if (!patient) {
-        res.status(404).json({ error: { message: "Patient not found" } });
-        return;
-      }
-
-      res.json({
-        id: patient.id,
-        mrn: patient.mrn,
-        firstName: patient.firstNameValue,
-        lastName: patient.lastNameValue,
-        dateOfBirth: patient.dateOfBirthValue.toISOString().split("T")[0],
-        age: patient.age,
-      });
+      const patient = await getPatientUseCase.execute(req.params.id);
+      res.json(toPatientDto(patient));
     } catch (error) {
       next(error);
     }
   },
 );
 
-// PUT /api/v1/patients/:id - Update a patient
 patientRouter.put(
   "/:id",
   requireRole("clinician", "admin"),
-  validate({ params: z.object({ id: z.string() }) }),
+  validate({ params: patientIdParamsSchema }),
   validate({ body: updatePatientSchema }),
   async (req, res, next) => {
     try {
@@ -158,25 +136,17 @@ patientRouter.put(
         req.params.id,
         req.body,
       );
-      res.json({
-        id: patient.id,
-        mrn: patient.mrn,
-        firstName: patient.firstNameValue,
-        lastName: patient.lastNameValue,
-        dateOfBirth: patient.dateOfBirthValue.toISOString().split("T")[0],
-        age: patient.age,
-      });
+      res.json(toPatientDto(patient));
     } catch (error) {
       next(error);
     }
   },
 );
 
-// DELETE /api/v1/patients/:id - Delete a patient
 patientRouter.delete(
   "/:id",
   requireRole("clinician", "admin"),
-  validate({ params: z.object({ id: z.string() }) }),
+  validate({ params: patientIdParamsSchema }),
   async (req, res, next) => {
     try {
       await deletePatientUseCase.execute(req.params.id);

@@ -9,13 +9,13 @@ import { auditMiddleware } from "./core/middleware/auditMiddleware.js";
 import { errorHandler } from "./core/errors/error-handler.js";
 import { config } from "./core/config/index.js";
 
-// Domain routers (will be created when implementing each domain)
-// import { patientRouter } from './domains/patient/presentation/patientRouter.js';
-// import { appointmentRouter } from './domains/appointment/presentation/appointmentRouter.js';
-// import { encounterRouter } from './domains/encounter/presentation/encounterRouter.js';
+  // Domain routers (will be created when implementing each domain)
+  // import { appointmentRouter } from './domains/appointment/presentation/appointmentRouter.js';
+  // import { encounterRouter } from './domains/encounter/presentation/encounterRouter.js';
 import { clinicalNoteRouter } from "./domains/clinical-note/presentation/clinicalNoteRouter.js";
 import { scheduleRouter } from "./domains/appointment/presentation/scheduleRouter.js";
 import { billingRouter } from "./domains/billing/presentation/billingRouter.js";
+import { patientRouter } from "./domains/patient/presentation/patientRouter.js";
 
 export function createApp(): Express {
   const app = express();
@@ -64,12 +64,12 @@ export function createApp(): Express {
   });
 
   // Domain routers - mount here when implemented
-  // app.use('/api/v1/patients', patientRouter);
   // app.use('/api/v1/appointments', appointmentRouter);
   // app.use('/api/v1/encounters', encounterRouter);
   app.use("/api/v1/clinical-notes", clinicalNoteRouter);
   app.use("/api/v1/schedules", scheduleRouter);
   app.use("/api/v1/billing", billingRouter);
+  app.use("/api/v1/patients", patientRouter);
 
   // Placeholder route
   app.get("/api/v1", (_req: Request, res: Response) => {
@@ -79,7 +79,7 @@ export function createApp(): Express {
       status: "operational",
       endpoints: {
         health: "/health",
-        // patients: '/api/v1/patients',
+        patients: "/api/v1/patients",
         // encounters: '/api/v1/encounters',
       },
     });
