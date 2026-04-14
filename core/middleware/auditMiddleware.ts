@@ -5,6 +5,7 @@ import { config } from "../config/index.js";
 const BILLING_PATHS = ["/invoices", "/payments", "/line-items"];
 const PATIENT_PATHS = ["/patients"];
 const APPOINTMENT_PATHS = ["/appointments", "/schedules"];
+const ENCOUNTER_PATHS = ["/encounters"];
 
 function isBillingOperation(path: string): boolean {
   return BILLING_PATHS.some((p) => path.includes(p));
@@ -16,6 +17,10 @@ function isPatientOperation(path: string): boolean {
 
 function isAppointmentOperation(path: string): boolean {
   return APPOINTMENT_PATHS.some((p) => path.includes(p));
+}
+
+function isEncounterOperation(path: string): boolean {
+  return ENCOUNTER_PATHS.some((p) => path.includes(p));
 }
 
 function sanitizeForAudit(
@@ -57,6 +62,7 @@ export const auditMiddleware = (
   const isBilling = isBillingOperation(req.path);
   const isPatient = isPatientOperation(req.path);
   const isAppointment = isAppointmentOperation(req.path);
+  const isEncounter = isEncounterOperation(req.path);
   const actorPatientId =
     req.user?.patientId ||
     (req.user?.roles?.includes("patient") ? req.user?.id : undefined);
@@ -64,7 +70,7 @@ export const auditMiddleware = (
     req.params?.patientId ||
     (isPatient ? req.params?.id : undefined) ||
     req.body?.patientId ||
-    (isAppointment ? actorPatientId : undefined);
+    (isAppointment || isEncounter ? actorPatientId : undefined);
 
   const auditLog: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
@@ -88,6 +94,9 @@ export const auditMiddleware = (
   } else if (isAppointment) {
     auditLog.query = req.query;
     auditLog.resourceType = "appointment";
+  } else if (isEncounter) {
+    auditLog.query = req.query;
+    auditLog.resourceType = "encounter";
   } else {
     auditLog.query = req.query;
     auditLog.resourceType = req.body?.resourceType;
@@ -107,12 +116,14 @@ export const auditMiddleware = (
       success: res.statusCode >= 200 && res.statusCode < 300,
     };
 
-    if (isBilling || isPatient || isAppointment) {
+    if (isBilling || isPatient || isAppointment || isEncounter) {
       completionLog.resourceType = isBilling
         ? "billing"
         : isPatient
           ? "patient"
-          : "appointment";
+          : isAppointment
+            ? "appointment"
+            : "encounter";
       completionLog.patientId = patientId;
     }
 

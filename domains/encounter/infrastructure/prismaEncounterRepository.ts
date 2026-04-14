@@ -9,6 +9,8 @@ export class PrismaEncounterRepository implements IEncounterRepository {
     return Encounter.rehydrate({
       id: record.id,
       patientId: record.patientId,
+      appointmentId: record.appointmentId,
+      providerId: record.providerId,
       encounterType: record.encounterType,
       startTime: record.startTime,
       endTime: record.endTime,
@@ -25,6 +27,8 @@ export class PrismaEncounterRepository implements IEncounterRepository {
       Encounter.rehydrate({
         id: record.id,
         patientId: record.patientId,
+        appointmentId: record.appointmentId,
+        providerId: record.providerId,
         encounterType: record.encounterType,
         startTime: record.startTime,
         endTime: record.endTime,
@@ -42,6 +46,8 @@ export class PrismaEncounterRepository implements IEncounterRepository {
       Encounter.rehydrate({
         id: record.id,
         patientId: record.patientId,
+        appointmentId: record.appointmentId,
+        providerId: record.providerId,
         encounterType: record.encounterType,
         startTime: record.startTime,
         endTime: record.endTime,
@@ -61,6 +67,8 @@ export class PrismaEncounterRepository implements IEncounterRepository {
       Encounter.rehydrate({
         id: record.id,
         patientId: record.patientId,
+        appointmentId: record.appointmentId,
+        providerId: record.providerId,
         encounterType: record.encounterType,
         startTime: record.startTime,
         endTime: record.endTime,
@@ -77,6 +85,8 @@ export class PrismaEncounterRepository implements IEncounterRepository {
     return Encounter.rehydrate({
       id: record.id,
       patientId: record.patientId,
+      appointmentId: record.appointmentId,
+      providerId: record.providerId,
       encounterType: record.encounterType,
       startTime: record.startTime,
       endTime: record.endTime,
@@ -85,9 +95,10 @@ export class PrismaEncounterRepository implements IEncounterRepository {
   }
 
   async save(encounter: Encounter): Promise<void> {
-    const data = {
-      id: encounter.id,
+    const updateData = {
       patientId: encounter.patientId,
+      appointmentId: encounter.appointmentId,
+      providerId: encounter.providerId,
       encounterType: encounter.encounterTypeValue,
       startTime: encounter.startTimeValue,
       endTime: encounter.endTimeValue,
@@ -96,8 +107,11 @@ export class PrismaEncounterRepository implements IEncounterRepository {
 
     await prisma.encounter.upsert({
       where: { id: encounter.id },
-      update: data,
-      create: data,
+      update: updateData,
+      create: {
+        id: encounter.id,
+        ...updateData,
+      },
     });
   }
 

@@ -4,6 +4,8 @@ export class Encounter {
   // Identity - never changes
   public readonly id: string;
   public readonly patientId: string;
+  public readonly appointmentId: string | null;
+  public readonly providerId: string | null;
 
   // Mutable properties
   private encounterType: string;
@@ -14,6 +16,8 @@ export class Encounter {
   private constructor(
     id: string,
     patientId: string,
+    appointmentId: string | null,
+    providerId: string | null,
     encounterType: string,
     startTime: Date,
     endTime: Date | null,
@@ -21,6 +25,8 @@ export class Encounter {
   ) {
     this.id = id;
     this.patientId = patientId;
+    this.appointmentId = appointmentId;
+    this.providerId = providerId;
     this.encounterType = encounterType;
     this.startTime = startTime;
     this.endTime = endTime;
@@ -32,6 +38,8 @@ export class Encounter {
    */
   static create(props: {
     patientId: string;
+    appointmentId?: string;
+    providerId?: string;
     encounterType: string;
     startTime: Date | string;
     endTime?: Date | string;
@@ -104,6 +112,8 @@ export class Encounter {
     return new Encounter(
       uuidv4(),
       props.patientId,
+      props.appointmentId?.trim() || null,
+      props.providerId?.trim() || null,
       normalizedType,
       startTime,
       endTime,
@@ -119,6 +129,8 @@ export class Encounter {
   static rehydrate(props: {
     id: string;
     patientId: string;
+    appointmentId?: string | null;
+    providerId?: string | null;
     encounterType: string;
     startTime: Date | string;
     endTime?: Date | string | null;
@@ -140,6 +152,8 @@ export class Encounter {
     return new Encounter(
       props.id,
       props.patientId,
+      props.appointmentId?.trim() || null,
+      props.providerId?.trim() || null,
       props.encounterType.trim().toLowerCase(),
       startTime,
       endTime,
@@ -235,6 +249,8 @@ export class Encounter {
     return {
       id: this.id,
       patientId: this.patientId,
+      appointmentId: this.appointmentId,
+      providerId: this.providerId,
       encounterType: this.encounterType,
       startTime: this.startTime.toISOString(),
       endTime: this.endTime?.toISOString() ?? null,

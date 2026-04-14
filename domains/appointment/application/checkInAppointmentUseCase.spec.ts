@@ -284,6 +284,8 @@ describe("CheckInAppointmentUseCase", () => {
 
     expect(mockEncounterRepo.save).toHaveBeenCalled();
     expect(savedEncounter?.patientId).toBe("patient-1");
+    expect(savedEncounter?.appointmentId).toBe("appointment-1");
+    expect(savedEncounter?.providerId).toBe("provider-1");
     expect(savedEncounter?.encounterTypeValue).toBe("outpatient");
     expect(savedEncounter?.statusValue).toBe("arrived");
   });

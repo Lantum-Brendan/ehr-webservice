@@ -39,7 +39,8 @@ export const authorizePatientAccess = (
       }
 
       const actorPatientId = user.patientId ?? user.id;
-      const requestedPatientId = req.params.id || req.body?.patientId;
+      const requestedPatientId =
+        req.params.patientId || req.params.id || req.body?.patientId;
 
       if (!requestedPatientId || requestedPatientId !== actorPatientId) {
         throw new ForbiddenError("Cannot access other patient's data");

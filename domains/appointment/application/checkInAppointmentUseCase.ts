@@ -37,6 +37,8 @@ export class CheckInAppointmentUseCase {
 
     const encounter = Encounter.create({
       patientId: appointment.patientId,
+      appointmentId: appointment.id,
+      providerId: appointment.providerId,
       encounterType: "outpatient",
       startTime: new Date(),
       status: "arrived",

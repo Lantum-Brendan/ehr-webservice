@@ -12,9 +12,12 @@ const { createApp } = await import("./app.js");
 const { appointmentRouter } = await import(
   "./domains/appointment/presentation/appointmentRouter.js"
 );
+const { encounterRouter } = await import(
+  "./domains/encounter/presentation/encounterRouter.js"
+);
 
 describe("createApp", () => {
-  it("mounts the appointment router and advertises it in API metadata", async () => {
+  it("mounts the appointment and encounter routers and advertises them in API metadata", async () => {
     const app = createApp();
     const routerStack = (app.router as { stack: any[] }).stack;
 
@@ -27,6 +30,15 @@ describe("createApp", () => {
     );
 
     expect(appointmentLayer).toBeDefined();
+    const encounterLayer = routerStack.find(
+      (layer) =>
+        layer.handle === encounterRouter &&
+        layer.matchers?.some((matcher: (path: string) => unknown) =>
+          Boolean(matcher("/api/v1/encounters")),
+        ),
+    );
+
+    expect(encounterLayer).toBeDefined();
 
     const apiRootLayer = routerStack.find(
       (layer) => layer.route?.path === "/api/v1" && layer.route?.methods?.get,
@@ -45,6 +57,7 @@ describe("createApp", () => {
 
     expect(resState.body?.endpoints).toMatchObject({
       appointments: "/api/v1/appointments",
+      encounters: "/api/v1/encounters",
       patients: "/api/v1/patients",
     });
   });
