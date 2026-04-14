@@ -9,13 +9,27 @@ import { RecordPaymentUseCase } from "../application/recordPaymentUseCase.js";
 import { GetInvoicesForPatientUseCase } from "../application/getInvoicesForPatientUseCase.js";
 import { GetInvoiceDetailUseCase } from "../application/getInvoiceDetailUseCase.js";
 import { PrismaBillingRepository } from "../infrastructure/prismaBillingRepository.js";
+import { FinancialAuditService } from "../infrastructure/financialAuditService.js";
 import { logger } from "@shared/logger/index.js";
 
 const billingRepo = new PrismaBillingRepository();
+const auditService = new FinancialAuditService(logger);
 
-const createInvoiceUseCase = new CreateInvoiceUseCase(billingRepo, logger);
-const addLineItemUseCase = new AddLineItemUseCase(billingRepo, logger);
-const recordPaymentUseCase = new RecordPaymentUseCase(billingRepo, logger);
+const createInvoiceUseCase = new CreateInvoiceUseCase(
+  billingRepo,
+  auditService,
+  logger,
+);
+const addLineItemUseCase = new AddLineItemUseCase(
+  billingRepo,
+  auditService,
+  logger,
+);
+const recordPaymentUseCase = new RecordPaymentUseCase(
+  billingRepo,
+  auditService,
+  logger,
+);
 const getInvoicesForPatientUseCase = new GetInvoicesForPatientUseCase(
   billingRepo,
   logger,
@@ -28,6 +42,7 @@ const getInvoiceDetailUseCase = new GetInvoiceDetailUseCase(
 const createInvoiceSchema = z.object({
   patientId: z.string().uuid("Invalid patient ID"),
   encounterId: z.string().uuid().optional(),
+  jurisdiction: z.string().trim().min(2).max(64).optional(),
   notes: z.string().optional(),
   dueDate: z.string().optional(),
 });
@@ -47,7 +62,10 @@ const addLineItemSchema = z.object({
 
 const recordPaymentSchema = z.object({
   invoiceId: z.string().uuid("Invalid invoice ID"),
-  amount: z.number().positive("Amount must be positive"),
+  amount: z
+    .number()
+    .positive("Amount must be positive")
+    .max(100000, "Amount exceeds maximum"),
   method: z.enum(["CASH", "CARD", "CHECK", "BANK_TRANSFER"]),
   reference: z.string().optional(),
 });

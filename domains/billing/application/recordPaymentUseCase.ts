@@ -1,8 +1,21 @@
-import { Payment, PaymentMethod } from "../domain/paymentEntity.js";
+import {
+  Payment,
+  PaymentMethod,
+  PaymentStatus,
+} from "../domain/paymentEntity.js";
 import { InvoiceStatus } from "../domain/invoiceEntity.js";
 import { IBillingRepository } from "../domain/billingRepository.js";
+import {
+  FinancialAuditService,
+  FinancialEventType,
+} from "../infrastructure/financialAuditService.js";
+import { Prisma } from "@prisma/client";
 import { type Logger } from "@shared/logger/index.js";
-import { NotFoundError, BadRequestError } from "@core/errors/appError.js";
+import {
+  NotFoundError,
+  BadRequestError,
+  ConflictError,
+} from "@core/errors/appError.js";
 
 interface RecordPaymentInput {
   invoiceId: string;
@@ -11,9 +24,37 @@ interface RecordPaymentInput {
   reference?: string;
 }
 
+interface PaymentValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+function validatePaymentAmount(
+  paymentAmount: number,
+  invoiceTotal: number,
+  totalPaid: number,
+): PaymentValidationResult {
+  const errors: string[] = [];
+
+  if (paymentAmount <= 0) {
+    errors.push("Payment amount must be positive");
+  }
+
+  if (paymentAmount > 100000) {
+    errors.push("Payment amount exceeds maximum allowed");
+  }
+
+  if (paymentAmount + totalPaid > invoiceTotal * 1.1) {
+    errors.push("Payment exceeding invoice total by more than 10%");
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 export class RecordPaymentUseCase {
   constructor(
     private readonly billingRepo: IBillingRepository,
+    private readonly auditService: FinancialAuditService,
     private readonly logger: Logger,
   ) {}
 
@@ -23,53 +64,92 @@ export class RecordPaymentUseCase {
       "Recording payment for invoice",
     );
 
-    const invoice = await this.billingRepo.findInvoiceById(input.invoiceId);
-    if (!invoice) {
-      throw new NotFoundError(`Invoice ${input.invoiceId} not found`);
-    }
+    try {
+      const result = await this.billingRepo.withSerializableTransaction(
+        async (repo) => {
+          const invoice = await repo.findInvoiceById(input.invoiceId);
+          if (!invoice) {
+            throw new NotFoundError(`Invoice ${input.invoiceId} not found`);
+          }
 
-    if (invoice.status === InvoiceStatus.PAID) {
-      throw new BadRequestError("Invoice is already paid");
-    }
+          if (invoice.status === InvoiceStatus.PAID) {
+            throw new BadRequestError("Invoice is already paid");
+          }
 
-    if (invoice.status === InvoiceStatus.CANCELLED) {
-      throw new BadRequestError("Cannot record payment on cancelled invoice");
-    }
+          if (invoice.status === InvoiceStatus.CANCELLED) {
+            throw new BadRequestError(
+              "Cannot record payment on cancelled invoice",
+            );
+          }
 
-    const payment = Payment.create({
-      invoiceId: input.invoiceId,
-      amount: input.amount,
-      method: input.method as PaymentMethod,
-      reference: input.reference,
-    });
+          const existingPayments = await repo.findPaymentsByInvoiceId(
+            input.invoiceId,
+          );
+          const totalPaid = existingPayments
+            .filter((payment) => payment.status === PaymentStatus.COMPLETED)
+            .reduce((sum, payment) => sum + payment.amount, 0);
 
-    payment.markAsCompleted();
+          const validation = validatePaymentAmount(
+            input.amount,
+            invoice.total,
+            totalPaid,
+          );
+          if (!validation.valid) {
+            throw new BadRequestError(validation.errors.join("; "));
+          }
 
-    const result = await this.billingRepo.executeInTransaction(async () => {
-      await this.billingRepo.savePayment(payment);
+          const payment = Payment.create({
+            invoiceId: input.invoiceId,
+            amount: input.amount,
+            method: input.method as PaymentMethod,
+            reference: input.reference,
+          });
 
-      const payments = await this.billingRepo.findPaymentsByInvoiceId(
-        input.invoiceId,
+          payment.markAsCompleted();
+          await repo.savePayment(payment);
+
+          const newTotalPaid = totalPaid + input.amount;
+          if (newTotalPaid >= invoice.total) {
+            invoice.markAsPaid();
+            await repo.saveInvoice(invoice);
+          }
+
+          return { invoice, payment, totalPaid: newTotalPaid };
+        },
       );
-      const totalPaid =
-        payments.reduce((sum, p) => sum + p.amount, 0) + input.amount;
 
-      if (totalPaid >= invoice.total) {
-        invoice.markAsPaid();
-        await this.billingRepo.saveInvoice(invoice);
-      }
-
-      return payment;
-    });
-
-    this.logger.info(
-      {
-        paymentId: result.id,
+      this.auditService.log(FinancialEventType.PAYMENT_RECORDED, {
+        paymentId: result.payment.id,
         invoiceId: input.invoiceId,
         method: input.method,
-      },
-      "Payment recorded successfully",
-    );
-    return result;
+        invoiceTotal: result.invoice.total,
+        totalPaid: result.totalPaid,
+      });
+
+      this.logger.info(
+        {
+          paymentId: result.payment.id,
+          invoiceId: input.invoiceId,
+          method: input.method,
+        },
+        "Payment recorded successfully",
+      );
+      return result.payment;
+    } catch (error) {
+      if (isSerializableTransactionConflict(error)) {
+        throw new ConflictError(
+          "Invoice payment state changed during processing. Retry the request.",
+        );
+      }
+
+      throw error;
+    }
   }
+}
+
+function isSerializableTransactionConflict(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2034"
+  );
 }

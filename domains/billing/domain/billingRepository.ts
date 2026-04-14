@@ -23,6 +23,7 @@ export interface IBillingRepository {
     pagination?: PaginationParams,
   ): Promise<PaginatedResult<Invoice>>;
   findInvoicesByEncounterId(encounterId: string): Promise<Invoice | null>;
+  findEncounterPatientId(encounterId: string): Promise<string | null>;
   saveInvoice(invoice: Invoice): Promise<void>;
   deleteInvoice(id: string): Promise<void>;
 
@@ -37,5 +38,7 @@ export interface IBillingRepository {
   savePayment(payment: Payment): Promise<void>;
 
   // Transaction support
-  executeInTransaction<T>(fn: () => Promise<T>): Promise<T>;
+  withSerializableTransaction<T>(
+    operation: (repository: IBillingRepository) => Promise<T>,
+  ): Promise<T>;
 }

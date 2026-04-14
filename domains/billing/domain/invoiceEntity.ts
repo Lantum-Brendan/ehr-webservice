@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
+import { calculateTax } from "./taxConfig.js";
 
 export enum InvoiceStatus {
   DRAFT = "DRAFT",
@@ -12,6 +13,7 @@ export class Invoice {
   public readonly id: string;
   public readonly patientId: string;
   public readonly encounterId: string | null;
+  public readonly jurisdiction: string | null;
 
   private _status: InvoiceStatus;
   private _subtotal: number;
@@ -27,6 +29,7 @@ export class Invoice {
     id: string,
     patientId: string,
     encounterId: string | null,
+    jurisdiction: string | null,
     status: InvoiceStatus,
     subtotal: number,
     tax: number,
@@ -40,6 +43,7 @@ export class Invoice {
     this.id = id;
     this.patientId = patientId;
     this.encounterId = encounterId;
+    this.jurisdiction = jurisdiction;
     this._status = status;
     this._subtotal = subtotal;
     this._tax = tax;
@@ -54,6 +58,7 @@ export class Invoice {
   static create(props: {
     patientId: string;
     encounterId?: string;
+    jurisdiction?: string;
     notes?: string;
     dueDate?: Date;
   }): Invoice {
@@ -62,6 +67,7 @@ export class Invoice {
       uuidv4(),
       props.patientId,
       props.encounterId ?? null,
+      props.jurisdiction ?? null,
       InvoiceStatus.DRAFT,
       0,
       0,
@@ -78,6 +84,7 @@ export class Invoice {
     id: string;
     patientId: string;
     encounterId: string | null;
+    jurisdiction: string | null;
     status: string;
     subtotal: number;
     tax: number;
@@ -92,6 +99,7 @@ export class Invoice {
       props.id,
       props.patientId,
       props.encounterId,
+      props.jurisdiction,
       props.status as InvoiceStatus,
       props.subtotal,
       props.tax,
@@ -149,8 +157,11 @@ export class Invoice {
   }
 
   calculateTotals(lineItems: { total: number }[]): void {
-    this._subtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
-    this._total = this._subtotal + this._tax;
+    this._subtotal = roundMoney(
+      lineItems.reduce((sum, item) => sum + item.total, 0),
+    );
+    this._tax = calculateTax(this._subtotal, this.jurisdiction ?? undefined);
+    this._total = roundMoney(this._subtotal + this._tax);
     this._updatedAt = new Date();
   }
 
@@ -192,6 +203,7 @@ export class Invoice {
       id: this.id,
       patientId: this.patientId,
       encounterId: this.encounterId,
+      jurisdiction: this.jurisdiction,
       status: this._status,
       subtotal: this._subtotal,
       tax: this._tax,
@@ -203,4 +215,8 @@ export class Invoice {
       updatedAt: this._updatedAt.toISOString(),
     };
   }
+}
+
+function roundMoney(amount: number): number {
+  return Math.round(amount * 100) / 100;
 }

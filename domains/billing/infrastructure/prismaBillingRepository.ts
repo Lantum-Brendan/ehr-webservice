@@ -7,17 +7,20 @@ import {
   PaginatedResult,
 } from "../domain/billingRepository.js";
 import { prisma } from "@infrastructure/database/prisma.client.js";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 
 function toNumber(value: number | Decimal): number {
   return typeof value === "number" ? value : Number(value.toString());
 }
 
+type BillingDbClient = PrismaClient | Prisma.TransactionClient;
+
 export class PrismaBillingRepository implements IBillingRepository {
-  constructor() {}
+  constructor(private readonly db: BillingDbClient = prisma) {}
 
   async findInvoiceById(id: string): Promise<Invoice | null> {
-    const record = await prisma.invoice.findUnique({
+    const record = await this.db.invoice.findUnique({
       where: { id },
       include: { lineItems: true, payments: true },
     });
@@ -28,6 +31,7 @@ export class PrismaBillingRepository implements IBillingRepository {
       id: record.id,
       patientId: record.patientId,
       encounterId: record.encounterId,
+      jurisdiction: record.jurisdiction,
       status: record.status,
       subtotal: toNumber(record.subtotal),
       tax: toNumber(record.tax),
@@ -49,13 +53,13 @@ export class PrismaBillingRepository implements IBillingRepository {
     const skip = (page - 1) * limit;
 
     const [records, total] = await Promise.all([
-      prisma.invoice.findMany({
+      this.db.invoice.findMany({
         where: { patientId },
         orderBy: { createdAt: "desc" },
         skip,
         take: limit,
       }),
-      prisma.invoice.count({ where: { patientId } }),
+      this.db.invoice.count({ where: { patientId } }),
     ]);
 
     const data = records.map((record) =>
@@ -63,6 +67,7 @@ export class PrismaBillingRepository implements IBillingRepository {
         id: record.id,
         patientId: record.patientId,
         encounterId: record.encounterId,
+        jurisdiction: record.jurisdiction,
         status: record.status,
         subtotal: toNumber(record.subtotal),
         tax: toNumber(record.tax),
@@ -87,7 +92,7 @@ export class PrismaBillingRepository implements IBillingRepository {
   async findInvoicesByEncounterId(
     encounterId: string,
   ): Promise<Invoice | null> {
-    const record = await prisma.invoice.findFirst({
+    const record = await this.db.invoice.findFirst({
       where: { encounterId },
     });
 
@@ -97,6 +102,7 @@ export class PrismaBillingRepository implements IBillingRepository {
       id: record.id,
       patientId: record.patientId,
       encounterId: record.encounterId,
+      jurisdiction: record.jurisdiction,
       status: record.status,
       subtotal: toNumber(record.subtotal),
       tax: toNumber(record.tax),
@@ -109,8 +115,17 @@ export class PrismaBillingRepository implements IBillingRepository {
     });
   }
 
+  async findEncounterPatientId(encounterId: string): Promise<string | null> {
+    const record = await this.db.encounter.findUnique({
+      where: { id: encounterId },
+      select: { patientId: true },
+    });
+
+    return record?.patientId ?? null;
+  }
+
   async saveInvoice(invoice: Invoice): Promise<void> {
-    await prisma.invoice.upsert({
+    await this.db.invoice.upsert({
       where: { id: invoice.id },
       update: {
         status: invoice.status,
@@ -119,12 +134,14 @@ export class PrismaBillingRepository implements IBillingRepository {
         total: invoice.total,
         dueDate: invoice.dueDate,
         paidAt: invoice.paidAt,
+        jurisdiction: invoice.jurisdiction,
         notes: invoice.notes,
       },
       create: {
         id: invoice.id,
         patientId: invoice.patientId,
         encounterId: invoice.encounterId,
+        jurisdiction: invoice.jurisdiction,
         status: invoice.status,
         subtotal: invoice.subtotal,
         tax: invoice.tax,
@@ -137,7 +154,7 @@ export class PrismaBillingRepository implements IBillingRepository {
   }
 
   async deleteInvoice(id: string): Promise<void> {
-    await prisma.invoice.delete({
+    await this.db.invoice.delete({
       where: { id },
     });
   }
@@ -145,7 +162,7 @@ export class PrismaBillingRepository implements IBillingRepository {
   async findLineItemsByInvoiceId(
     invoiceId: string,
   ): Promise<InvoiceLineItem[]> {
-    const records = await prisma.invoiceLineItem.findMany({
+    const records = await this.db.invoiceLineItem.findMany({
       where: { invoiceId },
       orderBy: { createdAt: "asc" },
     });
@@ -165,7 +182,7 @@ export class PrismaBillingRepository implements IBillingRepository {
   }
 
   async saveLineItem(lineItem: InvoiceLineItem): Promise<void> {
-    await prisma.invoiceLineItem.upsert({
+    await this.db.invoiceLineItem.upsert({
       where: { id: lineItem.id },
       update: {
         description: lineItem.description,
@@ -187,13 +204,13 @@ export class PrismaBillingRepository implements IBillingRepository {
   }
 
   async deleteLineItem(id: string): Promise<void> {
-    await prisma.invoiceLineItem.delete({
+    await this.db.invoiceLineItem.delete({
       where: { id },
     });
   }
 
   async findPaymentsByInvoiceId(invoiceId: string): Promise<Payment[]> {
-    const records = await prisma.payment.findMany({
+    const records = await this.db.payment.findMany({
       where: { invoiceId },
       orderBy: { createdAt: "desc" },
     });
@@ -213,7 +230,7 @@ export class PrismaBillingRepository implements IBillingRepository {
   }
 
   async findPaymentById(id: string): Promise<Payment | null> {
-    const record = await prisma.payment.findUnique({
+    const record = await this.db.payment.findUnique({
       where: { id },
     });
 
@@ -232,7 +249,7 @@ export class PrismaBillingRepository implements IBillingRepository {
   }
 
   async savePayment(payment: Payment): Promise<void> {
-    await prisma.payment.upsert({
+    await this.db.payment.upsert({
       where: { id: payment.id },
       update: {
         status: payment.status,
@@ -250,7 +267,39 @@ export class PrismaBillingRepository implements IBillingRepository {
     });
   }
 
-  async executeInTransaction<T>(fn: () => Promise<T>): Promise<T> {
-    return prisma.$transaction(fn);
+  async withSerializableTransaction<T>(
+    operation: (repository: IBillingRepository) => Promise<T>,
+  ): Promise<T> {
+    const rootClient = this.getRootClient();
+    if (!rootClient) {
+      return operation(this);
+    }
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await rootClient.$transaction(
+          async (tx) => operation(new PrismaBillingRepository(tx)),
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          },
+        );
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2034" &&
+          attempt < 2
+        ) {
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    throw new Error("Unreachable transaction retry state");
+  }
+
+  private getRootClient(): PrismaClient | null {
+    return "$transaction" in this.db ? (this.db as PrismaClient) : null;
   }
 }
