@@ -8,11 +8,11 @@ import { UpdatePatientUseCase } from "../application/updatePatientUseCase.js";
 import { DeletePatientUseCase } from "../application/deletePatientUseCase.js";
 import { GetPatientUseCase } from "../application/getPatientUseCase.js";
 import { PrismaPatientRepository } from "../infrastructure/prismaPatientRepository.js";
+import { sharedEventBus } from "@shared/event-bus/index.js";
 import { logger } from "@shared/logger/index.js";
-import { InMemoryEventBus } from "@shared/event-bus/event-bus.interface.js";
 
 const patientRepo = new PrismaPatientRepository();
-const eventBus = new InMemoryEventBus();
+const eventBus = sharedEventBus;
 
 const createPatientUseCase = new CreatePatientUseCase(
   patientRepo,

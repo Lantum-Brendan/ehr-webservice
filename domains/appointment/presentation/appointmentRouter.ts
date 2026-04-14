@@ -15,7 +15,7 @@ import { PrismaScheduleBlockRepository } from "../infrastructure/prismaScheduleB
 import { PrismaEncounterRepository } from "@domains/encounter/infrastructure/prismaEncounterRepository.js";
 import { Appointment } from "../domain/appointmentEntity.js";
 import { PrismaPatientRepository } from "@domains/patient/infrastructure/prismaPatientRepository.js";
-import { InMemoryEventBus } from "@shared/event-bus/event-bus.interface.js";
+import { sharedEventBus } from "@shared/event-bus/index.js";
 import { logger } from "@shared/logger/index.js";
 import {
   toAppointmentCancellationDto,
@@ -69,7 +69,7 @@ const selfBookAppointmentSchema = z.object({
 
 const appointmentRepo = new PrismaAppointmentRepository();
 const patientRepo = new PrismaPatientRepository();
-const eventBus = new InMemoryEventBus();
+const eventBus = sharedEventBus;
 const scheduleRepo = new PrismaProviderScheduleRepository();
 const blockRepo = new PrismaScheduleBlockRepository();
 const encounterRepo = new PrismaEncounterRepository();

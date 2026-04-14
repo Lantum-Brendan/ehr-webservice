@@ -6,7 +6,7 @@ import { requireRole } from "@core/guards/roleGuard.js";
 import { validate } from "@core/middleware/validateMiddleware.js";
 import { PrismaAppointmentRepository } from "@domains/appointment/infrastructure/prismaAppointmentRepository.js";
 import { PrismaPatientRepository } from "@domains/patient/infrastructure/prismaPatientRepository.js";
-import { InMemoryEventBus } from "@shared/event-bus/event-bus.interface.js";
+import { sharedEventBus } from "@shared/event-bus/index.js";
 import { logger } from "@shared/logger/index.js";
 import { CreateEncounterUseCase } from "../application/createEncounterUseCase.js";
 import {
@@ -26,7 +26,7 @@ import { toEncounterDto } from "./encounterDto.js";
 const encounterRepo = new PrismaEncounterRepository();
 const patientRepo = new PrismaPatientRepository();
 const appointmentRepo = new PrismaAppointmentRepository();
-const eventBus = new InMemoryEventBus();
+const eventBus = sharedEventBus;
 
 const createEncounterUseCase = new CreateEncounterUseCase(
   encounterRepo,

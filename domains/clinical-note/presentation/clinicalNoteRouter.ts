@@ -13,7 +13,7 @@ import {
 } from "../application/getClinicalNoteUseCase.js";
 import { PrismaClinicalNoteRepository } from "../infrastructure/prismaClinicalNoteRepository.js";
 import { PrismaEncounterRepository } from "@domains/encounter/infrastructure/prismaEncounterRepository.js";
-import { InMemoryEventBus } from "@shared/event-bus/event-bus.interface.js";
+import { sharedEventBus } from "@shared/event-bus/index.js";
 import { logger } from "@shared/logger/index.js";
 
 const idSchema = z.string().trim().min(1);
@@ -36,7 +36,7 @@ const updateClinicalNoteSchema = z.object({
 
 const noteRepo = new PrismaClinicalNoteRepository();
 const encounterRepo = new PrismaEncounterRepository();
-const eventBus = new InMemoryEventBus();
+const eventBus = sharedEventBus;
 
 const createClinicalNoteUseCase = new CreateClinicalNoteUseCase(
   noteRepo,
