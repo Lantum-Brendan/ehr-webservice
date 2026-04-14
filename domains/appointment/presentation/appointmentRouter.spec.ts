@@ -6,9 +6,11 @@ vi.mock("@core/guards/roleGuard.js", () => ({
     () => (req: Request, _res: Response, next: NextFunction): void => {
       const userId = req.header("x-user-id") ?? "";
       const rolesHeader = req.header("x-user-roles") ?? "";
+      const patientIdHeader = req.header("x-patient-id") ?? undefined;
       req.user = {
         id: userId,
         roles: rolesHeader.split(",").filter(Boolean),
+        patientId: patientIdHeader,
       };
       next();
     },
@@ -62,10 +64,12 @@ vi.mock("@infrastructure/database/prisma.client.js", () => ({
 const { prisma } = await import("@infrastructure/database/prisma.client.js");
 const { appointmentRouter } = await import("./appointmentRouter.js");
 
+const OWNER_PATIENT_ID = "patient-owner";
+
 function makeAppointmentRecord() {
   return {
     id: "appointment-1",
-    patientId: "patient-owner",
+    patientId: OWNER_PATIENT_ID,
     providerId: "provider-1",
     appointmentTypeId: "type-1",
     durationMinutes: 30,
@@ -158,6 +162,27 @@ describe("appointmentRouter ownership guards", () => {
     vi.clearAllMocks();
   });
 
+  it("allows patient users to read their own appointment via patientId claim", async () => {
+    (prisma.appointment.findUnique as ReturnType<typeof vi.fn>)
+      .mockResolvedValue(makeAppointmentRecord());
+
+    const result = await invokeRoute("get", "/:id", {
+      params: { id: "appointment-1" },
+      headers: {
+        "x-user-id": "auth-user-1",
+        "x-user-roles": "patient",
+        "x-patient-id": OWNER_PATIENT_ID,
+      },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.resState.statusCode).toBe(200);
+    expect(result.resState.body).toMatchObject({
+      id: "appointment-1",
+      patientId: OWNER_PATIENT_ID,
+    });
+  });
+
   it("blocks patient users from reading another patient's appointment", async () => {
     (prisma.appointment.findUnique as ReturnType<typeof vi.fn>)
       .mockResolvedValue(makeAppointmentRecord());
@@ -173,6 +198,37 @@ describe("appointmentRouter ownership guards", () => {
     expect(result.error).toMatchObject({
       statusCode: 403,
       message: "Access denied",
+    });
+  });
+
+  it("allows patients to list their own appointments via patientId claim", async () => {
+    (prisma.patient.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: OWNER_PATIENT_ID,
+      mrn: "MRN123",
+      firstName: "Jane",
+      lastName: "Doe",
+      dateOfBirth: new Date("1990-06-15T00:00:00.000Z"),
+    });
+    (prisma.appointment.findMany as ReturnType<typeof vi.fn>)
+      .mockResolvedValue([makeAppointmentRecord()]);
+
+    const result = await invokeRoute("get", "/patient/:patientId", {
+      params: { patientId: OWNER_PATIENT_ID },
+      headers: {
+        "x-user-id": "auth-user-1",
+        "x-user-roles": "patient",
+        "x-patient-id": OWNER_PATIENT_ID,
+      },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.resState.statusCode).toBe(200);
+    expect(result.resState.body).toMatchObject({
+      appointments: [
+        expect.objectContaining({
+          id: "appointment-1",
+        }),
+      ],
     });
   });
 

@@ -36,7 +36,7 @@ const updateClinicalNoteSchema = z.object({
 
 const noteRepo = new PrismaClinicalNoteRepository();
 const encounterRepo = new PrismaEncounterRepository();
-const eventBus = sharedEventBus;
+const eventBus = new InMemoryEventBus();
 
 const createClinicalNoteUseCase = new CreateClinicalNoteUseCase(
   noteRepo,

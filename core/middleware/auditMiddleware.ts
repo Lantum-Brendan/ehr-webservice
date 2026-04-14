@@ -4,6 +4,7 @@ import { config } from "../config/index.js";
 
 const BILLING_PATHS = ["/invoices", "/payments", "/line-items"];
 const PATIENT_PATHS = ["/patients"];
+const APPOINTMENT_PATHS = ["/appointments", "/schedules"];
 
 function isBillingOperation(path: string): boolean {
   return BILLING_PATHS.some((p) => path.includes(p));
@@ -11,6 +12,10 @@ function isBillingOperation(path: string): boolean {
 
 function isPatientOperation(path: string): boolean {
   return PATIENT_PATHS.some((p) => path.includes(p));
+}
+
+function isAppointmentOperation(path: string): boolean {
+  return APPOINTMENT_PATHS.some((p) => path.includes(p));
 }
 
 function sanitizeForAudit(
@@ -51,10 +56,15 @@ export const auditMiddleware = (
   const startTime = Date.now();
   const isBilling = isBillingOperation(req.path);
   const isPatient = isPatientOperation(req.path);
+  const isAppointment = isAppointmentOperation(req.path);
+  const actorPatientId =
+    req.user?.patientId ||
+    (req.user?.roles?.includes("patient") ? req.user?.id : undefined);
   const patientId =
     req.params?.patientId ||
     (isPatient ? req.params?.id : undefined) ||
-    req.body?.patientId;
+    req.body?.patientId ||
+    (isAppointment ? actorPatientId : undefined);
 
   const auditLog: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
@@ -75,6 +85,9 @@ export const auditMiddleware = (
     auditLog.resourceType = "billing";
   } else if (isPatient) {
     auditLog.resourceType = "patient";
+  } else if (isAppointment) {
+    auditLog.query = req.query;
+    auditLog.resourceType = "appointment";
   } else {
     auditLog.query = req.query;
     auditLog.resourceType = req.body?.resourceType;
@@ -94,8 +107,12 @@ export const auditMiddleware = (
       success: res.statusCode >= 200 && res.statusCode < 300,
     };
 
-    if (isBilling || isPatient) {
-      completionLog.resourceType = isBilling ? "billing" : "patient";
+    if (isBilling || isPatient || isAppointment) {
+      completionLog.resourceType = isBilling
+        ? "billing"
+        : isPatient
+          ? "patient"
+          : "appointment";
       completionLog.patientId = patientId;
     }
 

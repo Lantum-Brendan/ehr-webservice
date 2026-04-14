@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { requireRole } from "@core/guards/roleGuard.js";
+import { requireRole, type UserInfo } from "@core/guards/roleGuard.js";
 import { ForbiddenError } from "@core/errors/appError.js";
 import { CreateAppointmentUseCase } from "../application/createAppointmentUseCase.js";
 import { UpdateAppointmentUseCase } from "../application/updateAppointmentUseCase.js";
@@ -118,12 +118,16 @@ const getAvailableSlotsUseCase = new GetAvailableSlotsUseCase(
 );
 
 function assertPatientOwnsAppointment(
-  userId: string | undefined,
+  patientId: string | undefined,
   appointment: Appointment,
 ) {
-  if (!userId || appointment.patientId !== userId) {
+  if (!patientId || appointment.patientId !== patientId) {
     throw new ForbiddenError("Access denied");
   }
+}
+
+function getActorPatientId(user: UserInfo | undefined): string | undefined {
+  return user?.patientId ?? user?.id;
 }
 
 export const appointmentRouter = Router();
@@ -177,7 +181,7 @@ appointmentRouter.post(
   async (req, res, next) => {
     try {
       const input = selfBookAppointmentSchema.parse(req.body);
-      const patientId = req.user?.id;
+      const patientId = getActorPatientId(req.user);
 
       if (!patientId) {
         throw new ForbiddenError("Patient ID not found in token");
@@ -205,7 +209,7 @@ appointmentRouter.get(
       const isPatientUser = req.user?.roles?.includes("patient") ?? false;
 
       if (isPatientUser) {
-        assertPatientOwnsAppointment(req.user?.id, appointment);
+        assertPatientOwnsAppointment(getActorPatientId(req.user), appointment);
       }
 
       res.json(toAppointmentDto(appointment));
@@ -246,7 +250,10 @@ appointmentRouter.put(
         preloadedAppointment = await getAppointmentUseCase.execute(
           req.params.id,
         );
-        assertPatientOwnsAppointment(req.user?.id, preloadedAppointment);
+        assertPatientOwnsAppointment(
+          getActorPatientId(req.user),
+          preloadedAppointment,
+        );
       }
 
       const appointment = await cancelAppointmentUseCase.execute(
@@ -287,7 +294,10 @@ appointmentRouter.get(
   async (req, res, next) => {
     try {
       const isPatientUser = req.user?.roles?.includes("patient") ?? false;
-      if (isPatientUser && req.user?.id !== req.params.patientId) {
+      if (
+        isPatientUser &&
+        getActorPatientId(req.user) !== req.params.patientId
+      ) {
         res.status(403).json({ error: { message: "Access denied" } });
         return;
       }

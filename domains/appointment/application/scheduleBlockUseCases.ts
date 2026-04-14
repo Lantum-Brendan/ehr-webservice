@@ -213,9 +213,6 @@ export class ClearRangeUseCase {
       "Clearing schedules and blocks in date range",
     );
 
-    const schedules = await this.scheduleRepo.findByProviderId(providerId);
-    let schedulesDeleted = 0;
-
     const start = new Date(startDate);
     start.setHours(0, 0, 0, 0);
     const end = new Date(endDate);
