@@ -33,9 +33,10 @@ vi.mock("@shared/logger/index.js", () => ({
 
 vi.mock("@infrastructure/database/prisma.client.js", () => ({
   prisma: {
-    appointment: {
+    encounter: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
+      findFirst: vi.fn(),
       upsert: vi.fn(),
       delete: vi.fn(),
     },
@@ -46,57 +47,47 @@ vi.mock("@infrastructure/database/prisma.client.js", () => ({
       upsert: vi.fn(),
       delete: vi.fn(),
     },
-    provider: {
+    appointment: {
       findUnique: vi.fn(),
-    },
-    appointmentType: {
-      findUnique: vi.fn(),
-    },
-    location: {
-      findUnique: vi.fn(),
-    },
-    clinicSettings: {
-      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      upsert: vi.fn(),
+      delete: vi.fn(),
     },
   },
 }));
 
 const { prisma } = await import("@infrastructure/database/prisma.client.js");
-const { appointmentRouter } = await import("./appointmentRouter.js");
+const { encounterRouter } = await import("./encounterRouter.js");
 
-const OWNER_PATIENT_ID = "patient-owner";
+const OWNER_PATIENT_ID = "11111111-1111-1111-1111-111111111111";
+const OTHER_PATIENT_ID = "22222222-2222-2222-2222-222222222222";
+const ENCOUNTER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
-function makeAppointmentRecord() {
+function makeEncounterRecord() {
   return {
-    id: "appointment-1",
+    id: ENCOUNTER_ID,
     patientId: OWNER_PATIENT_ID,
+    appointmentId: "appointment-1",
     providerId: "provider-1",
-    appointmentTypeId: "type-1",
-    durationMinutes: 30,
-    locationId: "location-1",
-    scheduledStart: new Date("2099-01-01T10:00:00.000Z"),
-    scheduledEnd: new Date("2099-01-01T10:30:00.000Z"),
-    status: "SCHEDULED",
-    reason: "Initial reason",
-    notes: null,
+    encounterType: "outpatient",
+    startTime: new Date("2099-01-01T10:00:00.000Z"),
+    endTime: null,
+    status: "arrived",
     createdAt: new Date("2098-12-30T10:00:00.000Z"),
-    updatedAt: new Date("2098-12-30T10:00:00.000Z"),
-    cancelledAt: null,
-    cancelledBy: null,
-    cancelledReason: null,
   };
 }
 
 async function invokeRoute(
-  method: "get" | "put",
+  method: "get",
   path: string,
   options: {
     headers?: Record<string, string>;
     params?: Record<string, string>;
     body?: unknown;
+    query?: Record<string, unknown>;
   } = {},
 ) {
-  const layer = appointmentRouter.stack.find(
+  const layer = encounterRouter.stack.find(
     (entry: any) => entry.route?.path === path && entry.route?.methods?.[method],
   );
 
@@ -107,6 +98,7 @@ async function invokeRoute(
   const req = {
     body: options.body ?? {},
     params: options.params ?? {},
+    query: options.query ?? {},
     headers: options.headers ?? {},
     user: undefined,
     header(name: string) {
@@ -154,20 +146,20 @@ async function invokeRoute(
     }
   }
 
-  return { req, resState, error: capturedError };
+  return { resState, error: capturedError };
 }
 
-describe("appointmentRouter ownership guards", () => {
+describe("encounterRouter ownership guards", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("allows patient users to read their own appointment via patientId claim", async () => {
-    (prisma.appointment.findUnique as ReturnType<typeof vi.fn>)
-      .mockResolvedValue(makeAppointmentRecord());
+  it("allows patient users to read their own encounter via patientId claim", async () => {
+    (prisma.encounter.findUnique as ReturnType<typeof vi.fn>)
+      .mockResolvedValue(makeEncounterRecord());
 
     const result = await invokeRoute("get", "/:id", {
-      params: { id: "appointment-1" },
+      params: { id: ENCOUNTER_ID },
       headers: {
         "x-user-id": "auth-user-1",
         "x-user-roles": "patient",
@@ -178,30 +170,31 @@ describe("appointmentRouter ownership guards", () => {
     expect(result.error).toBeUndefined();
     expect(result.resState.statusCode).toBe(200);
     expect(result.resState.body).toMatchObject({
-      id: "appointment-1",
+      id: ENCOUNTER_ID,
       patientId: OWNER_PATIENT_ID,
     });
   });
 
-  it("blocks patient users from reading another patient's appointment", async () => {
-    (prisma.appointment.findUnique as ReturnType<typeof vi.fn>)
-      .mockResolvedValue(makeAppointmentRecord());
+  it("blocks patient users from reading another patient's encounter", async () => {
+    (prisma.encounter.findUnique as ReturnType<typeof vi.fn>)
+      .mockResolvedValue(makeEncounterRecord());
 
     const result = await invokeRoute("get", "/:id", {
-      params: { id: "appointment-1" },
+      params: { id: ENCOUNTER_ID },
       headers: {
-        "x-user-id": "patient-other",
+        "x-user-id": "auth-user-1",
         "x-user-roles": "patient",
+        "x-patient-id": OTHER_PATIENT_ID,
       },
     });
 
     expect(result.error).toMatchObject({
       statusCode: 403,
-      message: "Access denied",
+      message: "Cannot access this encounter",
     });
   });
 
-  it("allows patients to list their own appointments via patientId claim", async () => {
+  it("allows patients to list their own encounters", async () => {
     (prisma.patient.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: OWNER_PATIENT_ID,
       mrn: "MRN123",
@@ -209,8 +202,8 @@ describe("appointmentRouter ownership guards", () => {
       lastName: "Doe",
       dateOfBirth: new Date("1990-06-15T00:00:00.000Z"),
     });
-    (prisma.appointment.findMany as ReturnType<typeof vi.fn>)
-      .mockResolvedValue([makeAppointmentRecord()]);
+    (prisma.encounter.findMany as ReturnType<typeof vi.fn>)
+      .mockResolvedValue([makeEncounterRecord()]);
 
     const result = await invokeRoute("get", "/patient/:patientId", {
       params: { patientId: OWNER_PATIENT_ID },
@@ -224,32 +217,11 @@ describe("appointmentRouter ownership guards", () => {
     expect(result.error).toBeUndefined();
     expect(result.resState.statusCode).toBe(200);
     expect(result.resState.body).toMatchObject({
-      appointments: [
+      encounters: [
         expect.objectContaining({
-          id: "appointment-1",
+          id: ENCOUNTER_ID,
         }),
       ],
     });
-  });
-
-  it("blocks patient users from cancelling another patient's appointment", async () => {
-    (prisma.appointment.findUnique as ReturnType<typeof vi.fn>)
-      .mockResolvedValue(makeAppointmentRecord());
-
-    const result = await invokeRoute("put", "/:id/cancel", {
-      params: { id: "appointment-1" },
-      headers: {
-        "x-user-id": "patient-other",
-        "x-user-roles": "patient",
-      },
-      body: { reason: "Should not be allowed" },
-    });
-
-    expect(result.error).toMatchObject({
-      statusCode: 403,
-      message: "Access denied",
-    });
-    expect(prisma.appointment.findUnique).toHaveBeenCalledTimes(1);
-    expect(prisma.appointment.upsert).not.toHaveBeenCalled();
   });
 });

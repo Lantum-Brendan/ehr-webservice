@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { requireRole } from "@core/guards/roleGuard.js";
+import { requireRole, type UserInfo } from "@core/guards/roleGuard.js";
 import { ForbiddenError } from "@core/errors/appError.js";
 import { CreateAppointmentUseCase } from "../application/createAppointmentUseCase.js";
 import { UpdateAppointmentUseCase } from "../application/updateAppointmentUseCase.js";
@@ -15,7 +15,7 @@ import { PrismaScheduleBlockRepository } from "../infrastructure/prismaScheduleB
 import { PrismaEncounterRepository } from "@domains/encounter/infrastructure/prismaEncounterRepository.js";
 import { Appointment } from "../domain/appointmentEntity.js";
 import { PrismaPatientRepository } from "@domains/patient/infrastructure/prismaPatientRepository.js";
-import { InMemoryEventBus } from "@shared/event-bus/event-bus.interface.js";
+import { sharedEventBus } from "@shared/event-bus/index.js";
 import { logger } from "@shared/logger/index.js";
 import {
   toAppointmentCancellationDto,
@@ -69,7 +69,7 @@ const selfBookAppointmentSchema = z.object({
 
 const appointmentRepo = new PrismaAppointmentRepository();
 const patientRepo = new PrismaPatientRepository();
-const eventBus = new InMemoryEventBus();
+const eventBus = sharedEventBus;
 const scheduleRepo = new PrismaProviderScheduleRepository();
 const blockRepo = new PrismaScheduleBlockRepository();
 const encounterRepo = new PrismaEncounterRepository();
@@ -118,12 +118,16 @@ const getAvailableSlotsUseCase = new GetAvailableSlotsUseCase(
 );
 
 function assertPatientOwnsAppointment(
-  userId: string | undefined,
+  patientId: string | undefined,
   appointment: Appointment,
 ) {
-  if (!userId || appointment.patientId !== userId) {
+  if (!patientId || appointment.patientId !== patientId) {
     throw new ForbiddenError("Access denied");
   }
+}
+
+function getActorPatientId(user: UserInfo | undefined): string | undefined {
+  return user?.patientId ?? user?.id;
 }
 
 export const appointmentRouter = Router();
@@ -177,7 +181,7 @@ appointmentRouter.post(
   async (req, res, next) => {
     try {
       const input = selfBookAppointmentSchema.parse(req.body);
-      const patientId = req.user?.id;
+      const patientId = getActorPatientId(req.user);
 
       if (!patientId) {
         throw new ForbiddenError("Patient ID not found in token");
@@ -205,7 +209,7 @@ appointmentRouter.get(
       const isPatientUser = req.user?.roles?.includes("patient") ?? false;
 
       if (isPatientUser) {
-        assertPatientOwnsAppointment(req.user?.id, appointment);
+        assertPatientOwnsAppointment(getActorPatientId(req.user), appointment);
       }
 
       res.json(toAppointmentDto(appointment));
@@ -246,7 +250,10 @@ appointmentRouter.put(
         preloadedAppointment = await getAppointmentUseCase.execute(
           req.params.id,
         );
-        assertPatientOwnsAppointment(req.user?.id, preloadedAppointment);
+        assertPatientOwnsAppointment(
+          getActorPatientId(req.user),
+          preloadedAppointment,
+        );
       }
 
       const appointment = await cancelAppointmentUseCase.execute(
@@ -287,7 +294,10 @@ appointmentRouter.get(
   async (req, res, next) => {
     try {
       const isPatientUser = req.user?.roles?.includes("patient") ?? false;
-      if (isPatientUser && req.user?.id !== req.params.patientId) {
+      if (
+        isPatientUser &&
+        getActorPatientId(req.user) !== req.params.patientId
+      ) {
         res.status(403).json({ error: { message: "Access denied" } });
         return;
       }

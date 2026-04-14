@@ -13,7 +13,7 @@ import {
 } from "../application/getClinicalNoteUseCase.js";
 import { PrismaClinicalNoteRepository } from "../infrastructure/prismaClinicalNoteRepository.js";
 import { PrismaEncounterRepository } from "@domains/encounter/infrastructure/prismaEncounterRepository.js";
-import { InMemoryEventBus } from "@shared/event-bus/event-bus.interface.js";
+import { sharedEventBus } from "@shared/event-bus/index.js";
 import { logger } from "@shared/logger/index.js";
 
 const idSchema = z.string().trim().min(1);

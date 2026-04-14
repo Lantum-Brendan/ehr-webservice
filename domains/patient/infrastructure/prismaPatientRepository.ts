@@ -1,5 +1,8 @@
 import { Patient } from "../domain/patientEntity.js";
-import { IPatientRepository } from "../domain/patientRepository.js";
+import {
+  IPatientRepository,
+  PatientSearchParams,
+} from "../domain/patientRepository.js";
 import { prisma } from "@infrastructure/database/prisma.client.js";
 
 export class PrismaPatientRepository implements IPatientRepository {
@@ -39,6 +42,32 @@ export class PrismaPatientRepository implements IPatientRepository {
 
   async findAll(): Promise<Patient[]> {
     const records = await prisma.patient.findMany();
+    return records.map((record) =>
+      Patient.rehydrate({
+        id: record.id,
+        mrn: record.mrn,
+        firstName: record.firstName,
+        lastName: record.lastName,
+        dateOfBirth: record.dateOfBirth,
+      }),
+    );
+  }
+
+  async search(params: PatientSearchParams): Promise<Patient[]> {
+    const where: Record<string, unknown> = {};
+
+    if (params.id) where.id = params.id;
+    if (params.mrn) where.mrn = params.mrn.toUpperCase();
+    if (params.firstName)
+      where.firstName = { contains: params.firstName, mode: "insensitive" };
+    if (params.lastName)
+      where.lastName = { contains: params.lastName, mode: "insensitive" };
+
+    const records = await prisma.patient.findMany({
+      where: Object.keys(where).length > 0 ? where : undefined,
+      take: 100,
+    });
+
     return records.map((record) =>
       Patient.rehydrate({
         id: record.id,

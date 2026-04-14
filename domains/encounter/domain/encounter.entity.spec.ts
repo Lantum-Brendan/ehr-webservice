@@ -23,6 +23,8 @@ describe("Encounter.create", () => {
 
     expect(encounter.id).toBe("enc-uuid-5678");
     expect(encounter.patientId).toBe("patient-123");
+    expect(encounter.appointmentId).toBeNull();
+    expect(encounter.providerId).toBeNull();
     expect(encounter.encounterTypeValue).toBe("outpatient");
     expect(encounter.statusValue).toBe("completed");
   });
@@ -386,6 +388,8 @@ describe("Encounter.toJSON", () => {
     expect(json).toEqual({
       id: "enc-uuid-5678",
       patientId: "patient-123",
+      appointmentId: null,
+      providerId: null,
       encounterType: "outpatient",
       startTime: "2026-04-01T10:00:00.000Z",
       endTime: "2026-04-01T11:00:00.000Z",

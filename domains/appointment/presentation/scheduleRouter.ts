@@ -7,17 +7,17 @@ import {
   UpdateScheduleUseCase,
   DeleteScheduleUseCase,
   GetSchedulesForProviderUseCase,
-} from "./application/scheduleUseCases.js";
-import { CopyWeekScheduleUseCase } from "./application/copyWeekScheduleUseCase.js";
+} from "../application/scheduleUseCases.js";
+import { CopyWeekScheduleUseCase } from "../application/copyWeekScheduleUseCase.js";
 import {
   CreateBlockUseCase,
   UpdateBlockUseCase,
   DeleteBlockUseCase,
   GetBlocksForProviderUseCase,
   ClearRangeUseCase,
-} from "./application/scheduleBlockUseCases.js";
-import { PrismaProviderScheduleRepository } from "./infrastructure/prismaProviderScheduleRepository.js";
-import { PrismaScheduleBlockRepository } from "./infrastructure/prismaScheduleBlockRepository.js";
+} from "../application/scheduleBlockUseCases.js";
+import { PrismaProviderScheduleRepository } from "../infrastructure/prismaProviderScheduleRepository.js";
+import { PrismaScheduleBlockRepository } from "../infrastructure/prismaScheduleBlockRepository.js";
 import { logger } from "@shared/logger/index.js";
 
 const idSchema = z.string().trim().min(1);
