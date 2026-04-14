@@ -9,12 +9,14 @@ import {
 import { prisma } from "@infrastructure/database/prisma.client.js";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
+import { logger } from "@shared/logger/index.js";
 
 function toNumber(value: number | Decimal): number {
   return typeof value === "number" ? value : Number(value.toString());
 }
 
 type BillingDbClient = PrismaClient | Prisma.TransactionClient;
+const MAX_SERIALIZABLE_TRANSACTION_RETRIES = 3;
 
 export class PrismaBillingRepository implements IBillingRepository {
   constructor(private readonly db: BillingDbClient = prisma) {}
@@ -275,7 +277,11 @@ export class PrismaBillingRepository implements IBillingRepository {
       return operation(this);
     }
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (
+      let attempt = 1;
+      attempt <= MAX_SERIALIZABLE_TRANSACTION_RETRIES;
+      attempt += 1
+    ) {
       try {
         return await rootClient.$transaction(
           async (tx) => operation(new PrismaBillingRepository(tx)),
@@ -284,11 +290,21 @@ export class PrismaBillingRepository implements IBillingRepository {
           },
         );
       } catch (error) {
-        if (
+        const isTransactionConflict =
           error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === "P2034" &&
-          attempt < 2
+          error.code === "P2034";
+
+        if (
+          isTransactionConflict &&
+          attempt < MAX_SERIALIZABLE_TRANSACTION_RETRIES
         ) {
+          logger.warn(
+            {
+              attempt,
+              maxAttempts: MAX_SERIALIZABLE_TRANSACTION_RETRIES,
+            },
+            "Retrying billing serializable transaction after contention",
+          );
           continue;
         }
 

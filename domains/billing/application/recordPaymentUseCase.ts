@@ -44,7 +44,7 @@ function validatePaymentAmount(
     errors.push("Payment amount exceeds maximum allowed");
   }
 
-  if (paymentAmount + totalPaid > invoiceTotal * 1.1) {
+  if (roundMoney(paymentAmount + totalPaid) > invoiceTotal * 1.1) {
     errors.push("Payment exceeding invoice total by more than 10%");
   }
 
@@ -108,7 +108,7 @@ export class RecordPaymentUseCase {
           payment.markAsCompleted();
           await repo.savePayment(payment);
 
-          const newTotalPaid = totalPaid + input.amount;
+          const newTotalPaid = roundMoney(totalPaid + input.amount);
           if (newTotalPaid >= invoice.total) {
             invoice.markAsPaid();
             await repo.saveInvoice(invoice);
@@ -152,4 +152,8 @@ function isSerializableTransactionConflict(error: unknown): boolean {
     error instanceof Prisma.PrismaClientKnownRequestError &&
     error.code === "P2034"
   );
+}
+
+function roundMoney(amount: number): number {
+  return Math.round(amount * 100) / 100;
 }
