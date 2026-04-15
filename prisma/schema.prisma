@@ -260,3 +260,27 @@ model Medication {
   @@index([patientId])
   @@map("medications")
 }
+
+// ========================================
+// Audit Trail Models (HIPAA Compliance)
+// ========================================
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  userEmail   String?
+  patientId   String?  // May be null for system actions
+  resourceType String  // e.g., Patient, LabOrder, Diagnosis
+  resourceId  String
+  action      String   // CREATE, READ, UPDATE, DELETE, EXPORT
+  ipAddress   String?
+  userAgent   String?
+  details     Json?    // Request/response details (PII stripped)
+  timestamp   DateTime @default(now())
+
+  @@index([patientId])
+  @@index([userId])
+  @@index([resourceType, resourceId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}

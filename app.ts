@@ -6,14 +6,10 @@ import rateLimit from "express-rate-limit";
 // Core components (will create these next)
 import { requestIdMiddleware } from "./core/middleware/request-id.middleware.js";
 import { auditMiddleware } from "./core/middleware/audit.middleware.js";
+import { hipaaAuditMiddleware } from "./core/middleware/hipaaAuditMiddleware.js";
 import { errorHandler } from "./core/errors/error-handler.js";
 import { config } from "./core/config/index.js";
 
-<<<<<<< HEAD
-// Domain routers (will be created when implementing each domain)
-// import { patientRouter } from './domains/patient/presentation/patient.router.js';
-// import { encounterRouter } from './domains/encounter/presentation/encounter.router.js';
-=======
 // Domain routers
 import { appointmentRouter } from "./domains/appointment/presentation/appointmentRouter.js";
 import { encounterRouter } from "./domains/encounter/presentation/encounterRouter.js";
@@ -24,6 +20,7 @@ import { billingRouter } from "./domains/billing/presentation/billingRouter.js";
 import { patientRouter } from "./domains/patient/presentation/patientRouter.js";
 import { labRouter } from "./domains/lab/presentation/labRouter.js";
 import { clinicalRouter } from "./domains/clinical/presentation/clinicalRouter.js";
+import { reportsRouter } from "./domains/reports/presentation/reportsRouter.js";
 >>>>>>> 8502280 (feat(clinical): add clinical domain with diagnosis, allergies, medications)
 
 export function createApp(): Express {
@@ -56,6 +53,7 @@ export function createApp(): Express {
 
   // HIPAA audit trail on every request
   app.use(auditMiddleware);
+  app.use(hipaaAuditMiddleware);
 
   // Health check
   app.get("/health", (_req: Request, res: Response) => {
@@ -82,6 +80,7 @@ export function createApp(): Express {
   app.use("/api/v1/patients", patientRouter);
   app.use("/api/v1/labs", labRouter);
   app.use("/api/v1/clinical", clinicalRouter);
+  app.use("/api/v1/reports", reportsRouter);
 
   // Placeholder route
   app.get("/api/v1", (_req: Request, res: Response) => {
