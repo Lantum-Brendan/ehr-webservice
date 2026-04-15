@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { ForbiddenError } from "../errors/app.error.js";
+import { ForbiddenError } from "../errors/appError.js";
 
 /**
  * Middleware that verifies patient consent for PHI access
