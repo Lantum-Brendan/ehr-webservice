@@ -9,9 +9,22 @@ import { auditMiddleware } from "./core/middleware/audit.middleware.js";
 import { errorHandler } from "./core/errors/error-handler.js";
 import { config } from "./core/config/index.js";
 
+<<<<<<< HEAD
 // Domain routers (will be created when implementing each domain)
 // import { patientRouter } from './domains/patient/presentation/patient.router.js';
 // import { encounterRouter } from './domains/encounter/presentation/encounter.router.js';
+=======
+// Domain routers
+import { appointmentRouter } from "./domains/appointment/presentation/appointmentRouter.js";
+import { encounterRouter } from "./domains/encounter/presentation/encounterRouter.js";
+import { fhirGatewayRouter } from "./domains/fhir-gateway/presentation/fhirGatewayRouter.js";
+import { clinicalNoteRouter } from "./domains/clinical-note/presentation/clinicalNoteRouter.js";
+import { scheduleRouter } from "./domains/appointment/presentation/scheduleRouter.js";
+import { billingRouter } from "./domains/billing/presentation/billingRouter.js";
+import { patientRouter } from "./domains/patient/presentation/patientRouter.js";
+import { labRouter } from "./domains/lab/presentation/labRouter.js";
+import { clinicalRouter } from "./domains/clinical/presentation/clinicalRouter.js";
+>>>>>>> 8502280 (feat(clinical): add clinical domain with diagnosis, allergies, medications)
 
 export function createApp(): Express {
   const app = express();
@@ -59,10 +72,16 @@ export function createApp(): Express {
     next();
   });
 
-  // Domain routers - mount here when implemented
-  // app.use('/api/v1/patients', patientRouter);
-  // app.use('/api/v1/encounters', encounterRouter);
-  // app.use('/api/v1/fhir', fhirGatewayRouter);
+// Domain routers
+  app.use("/api/v1/appointments", appointmentRouter);
+  app.use("/api/v1/encounters", encounterRouter);
+  app.use("/api/v1/fhir", fhirGatewayRouter);
+  app.use("/api/v1/clinical-notes", clinicalNoteRouter);
+  app.use("/api/v1/schedules", scheduleRouter);
+  app.use("/api/v1/billing", billingRouter);
+  app.use("/api/v1/patients", patientRouter);
+  app.use("/api/v1/labs", labRouter);
+  app.use("/api/v1/clinical", clinicalRouter);
 
   // Placeholder route
   app.get("/api/v1", (_req: Request, res: Response) => {
