@@ -28,6 +28,10 @@ model Patient {
   billingRecords BillingRecord[]
   appointments Appointment[]
   invoices Invoice[]
+  labOrders LabOrder[]
+  diagnoses Diagnosis[]
+  allergies Allergy[]
+  medications Medication[]
 
   @@map("patients")
 }
@@ -255,3 +259,112 @@ model ClinicSettings {
 }
 
 // Add more models based on your FHIR requirements
+
+// ========================================
+// Lab Module Models
+// ========================================
+
+model LabOrder {
+  id           String   @id @default(uuid())
+  patientId    String
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  encounterId String?
+  clinicianId String
+  status    String   @default("ORDERED")  // ORDERED, COLLECTED, IN_PROGRESS, COMPLETED, CANCELLED
+  priority   String   @default("ROUTINE")  // STAT, ROUTINE, URGENT
+  testType   String   // e.g., "CBC", "BMP", "UA"
+  notes     String?
+  orderedAt  DateTime @default(now())
+  collectedAt DateTime?
+  completedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  results   LabResult[]
+
+  @@index([patientId])
+  @@index([status])
+  @@index([orderedAt])
+  @@map("lab_orders")
+}
+
+model LabResult {
+  id           String   @id @default(uuid())
+  labOrderId   String
+  labOrder     LabOrder  @relation(fields: [labOrderId], references: [id])
+  testName    String
+  value      String?
+  unit       String?
+  referenceRange String?
+  flag       String?  // ABNORMAL, NORMAL, CRITICAL
+  status     String   @default("PENDING")  // PENDING, PRELIMINARY, FINAL, CORRECTED
+  performedAt DateTime?
+  resultedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([labOrderId])
+  @@map("lab_results")
+}
+
+// ========================================
+// Clinical Domain Models
+// ========================================
+
+model Diagnosis {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient    Patient  @relation(fields: [patientId], references: [id])
+  encounterId String?
+  code       String   // ICD-10 code
+  description String
+  status     String   @default("ACTIVE") // ACTIVE, RESOLVED, INACTIVE
+  onsetDate  DateTime?
+  resolvedDate DateTime?
+  recordedBy  String
+  recordedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([patientId])
+  @@index([code])
+  @@map("diagnoses")
+}
+
+model Allergy {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  allergen   String
+  type       String   // DRUG, FOOD, ENVIRONMENTAL
+  severity   String   // MILD, MODERATE, SEVERE, LIFE_THREATENING
+  reaction   String?
+  status     String   @default("ACTIVE") // ACTIVE, INACTIVE, RESOLVED
+  recordedBy String
+  recordedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([patientId])
+  @@map("allergies")
+}
+
+model Medication {
+  id           String   @id @default(uuid())
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id])
+  encounterId  String?
+  name         String
+  dosage       String
+  frequency   String
+  route        String   // ORAL, IV, IM, TOPICAL, etc.
+  startDate    DateTime
+  endDate      DateTime?
+  status       String   @default("ACTIVE") // ACTIVE, DISCONTINUED, ON_HOLD
+  prescribedBy String
+  prescribedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([patientId])
+  @@map("medications")
+}
