@@ -18,6 +18,7 @@ import { scheduleRouter } from "./domains/appointment/presentation/scheduleRoute
 import { billingRouter } from "./domains/billing/presentation/billingRouter.js";
 import { patientRouter } from "./domains/patient/presentation/patientRouter.js";
 import { labRouter } from "./domains/lab/presentation/labRouter.js";
+import { clinicalRouter } from "./domains/clinical/presentation/clinicalRouter.js";
 
 export function createApp(): Express {
   const app = express();
@@ -74,6 +75,7 @@ export function createApp(): Express {
   app.use("/api/v1/billing", billingRouter);
   app.use("/api/v1/patients", patientRouter);
   app.use("/api/v1/labs", labRouter);
+  app.use("/api/v1/clinical", clinicalRouter);
 
   // Placeholder route
   app.get("/api/v1", (_req: Request, res: Response) => {

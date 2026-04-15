@@ -29,6 +29,9 @@ model Patient {
   appointments Appointment[]
   invoices Invoice[]
   labOrders LabOrder[]
+  diagnoses Diagnosis[]
+  allergies Allergy[]
+  medications Medication[]
 
   @@map("patients")
 }
@@ -301,4 +304,67 @@ model LabResult {
 
   @@index([labOrderId])
   @@map("lab_results")
+}
+
+// ========================================
+// Clinical Domain Models
+// ========================================
+
+model Diagnosis {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient    Patient  @relation(fields: [patientId], references: [id])
+  encounterId String?
+  code       String   // ICD-10 code
+  description String
+  status     String   @default("ACTIVE") // ACTIVE, RESOLVED, INACTIVE
+  onsetDate  DateTime?
+  resolvedDate DateTime?
+  recordedBy  String
+  recordedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([patientId])
+  @@index([code])
+  @@map("diagnoses")
+}
+
+model Allergy {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  allergen   String
+  type       String   // DRUG, FOOD, ENVIRONMENTAL
+  severity   String   // MILD, MODERATE, SEVERE, LIFE_THREATENING
+  reaction   String?
+  status     String   @default("ACTIVE") // ACTIVE, INACTIVE, RESOLVED
+  recordedBy String
+  recordedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([patientId])
+  @@map("allergies")
+}
+
+model Medication {
+  id           String   @id @default(uuid())
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id])
+  encounterId  String?
+  name         String
+  dosage       String
+  frequency   String
+  route        String   // ORAL, IV, IM, TOPICAL, etc.
+  startDate    DateTime
+  endDate      DateTime?
+  status       String   @default("ACTIVE") // ACTIVE, DISCONTINUED, ON_HOLD
+  prescribedBy String
+  prescribedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([patientId])
+  @@map("medications")
 }
