@@ -1,7 +1,7 @@
 import { Diagnosis } from "../domain/diagnosisEntity.js";
 import { IClinicalRepository } from "../domain/clinicalRepository.js";
 import { type Logger } from "@shared/logger/index.js";
-import { NotFoundError, BadRequestError } from "@core/errors/appError.js";
+import { NotFoundError, BadRequestError } from "@core/errors/appError.ts";
 
 interface CreateDiagnosisInput {
   patientId: string;

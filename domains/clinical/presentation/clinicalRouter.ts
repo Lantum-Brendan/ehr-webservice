@@ -6,18 +6,18 @@ import {
   CreateDiagnosisUseCase,
   UpdateDiagnosisUseCase,
   GetDiagnosesForPatientUseCase,
-} from "./application/diagnosisUseCase.js";
+} from "../application/diagnosisUseCase.ts";
 import {
   CreateAllergyUseCase,
   UpdateAllergyUseCase,
   GetAllergiesForPatientUseCase,
-} from "./application/allergyUseCase.js";
+} from "../application/allergyUseCase.ts";
 import {
   CreateMedicationUseCase,
   UpdateMedicationUseCase,
   GetMedicationsForPatientUseCase,
-} from "./application/medicationUseCase.js";
-import { PrismaClinicalRepository } from "./infrastructure/prismaClinicalRepository.js";
+} from "../application/medicationUseCase.ts";
+import { PrismaClinicalRepository } from "../infrastructure/prismaClinicalRepository.js";
 import { logger } from "@shared/logger/index.js";
 
 const clinicalRepo = new PrismaClinicalRepository();

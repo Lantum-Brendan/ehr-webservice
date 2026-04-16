@@ -2,7 +2,7 @@ import { PrismaPatientRepository } from "../../patient/infrastructure/prismaPati
 import { PrismaLabRepository } from "../../lab/infrastructure/prismaLabRepository.js";
 import type { LabSummaryReport } from "../domain/reportTypes.js";
 import { type Logger } from "@shared/logger/index.js";
-import { NotFoundError } from "@core/errors/appError.js";
+import { NotFoundError } from "@core/errors/appError.ts";
 
 export class GenerateLabSummaryUseCase {
   constructor(private readonly logger: Logger) {}

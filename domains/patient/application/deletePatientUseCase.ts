@@ -1,7 +1,7 @@
 import { IPatientRepository } from "../domain/patientRepository.js";
 import { IEventBus } from "@shared/event-bus/event-bus.interface.js";
 import { type Logger } from "@shared/logger/index.js";
-import { NotFoundError } from "@core/errors/appError.js";
+import { NotFoundError } from "@core/errors/appError.ts";
 
 export class DeletePatientUseCase {
   constructor(

@@ -8,7 +8,7 @@ import {
   BadRequestError,
   NotFoundError,
   ConflictError,
-} from "@core/errors/appError.js";
+} from "@core/errors/appError.ts";
 import { prisma } from "@infrastructure/database/prisma.client.js";
 import { getAppointmentClinicSettings } from "../infrastructure/appointmentClinicSettings.js";
 
@@ -84,7 +84,9 @@ export class CreateAppointmentUseCase {
         where: { id: input.locationId },
       });
       if (!locationRecord) {
-        throw new NotFoundError(`Location with ID ${input.locationId} not found`);
+        throw new NotFoundError(
+          `Location with ID ${input.locationId} not found`,
+        );
       }
       if (!locationRecord.isActive) {
         throw new ConflictError("Location is not available");

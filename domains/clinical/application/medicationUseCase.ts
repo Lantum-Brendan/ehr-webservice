@@ -1,7 +1,7 @@
 import { Medication, MedicationRoute } from "../domain/medicationEntity.js";
 import { IClinicalRepository } from "../domain/clinicalRepository.js";
 import { type Logger } from "@shared/logger/index.js";
-import { NotFoundError } from "@core/errors/appError.js";
+import { NotFoundError } from "@core/errors/appError.ts";
 
 interface CreateMedicationInput {
   patientId: string;

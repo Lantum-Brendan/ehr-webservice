@@ -1,6 +1,6 @@
 import { Appointment } from "../domain/appointmentEntity.js";
 import { IAppointmentRepository } from "../domain/appointmentRepository.js";
-import { NotFoundError } from "@core/errors/appError.js";
+import { NotFoundError } from "@core/errors/appError.ts";
 
 export class GetAppointmentUseCase {
   constructor(private readonly appointmentRepo: IAppointmentRepository) {}

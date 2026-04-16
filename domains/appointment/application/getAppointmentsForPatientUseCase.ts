@@ -1,7 +1,7 @@
 import { Appointment } from "../domain/appointmentEntity.js";
 import { IAppointmentRepository } from "../domain/appointmentRepository.js";
 import { IPatientRepository } from "@domains/patient/domain/patientRepository.js";
-import { NotFoundError } from "@core/errors/appError.js";
+import { NotFoundError } from "@core/errors/appError.ts";
 
 export class GetAppointmentsForPatientUseCase {
   constructor(

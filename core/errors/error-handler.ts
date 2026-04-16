@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { AppError } from "./app.error.js";
+import { AppError } from "./appError.ts";
 import { logger } from "../../shared/logger/index.js";
 
 /**
@@ -52,7 +52,12 @@ export const errorHandler = (
   }
 
   // Zod validation errors
-  if (err && typeof err === "object" && "errors" in err && "issue" in err) {
+  if (
+    err &&
+    typeof err === "object" &&
+    "errors" in err &&
+    ("issue" in err || "issues" in err)
+  ) {
     logger.warn(
       {
         validationErrors: err,
@@ -67,6 +72,19 @@ export const errorHandler = (
         code: "VALIDATION_ERROR",
         message: "Validation failed",
         details: err,
+        requestId: req.id,
+      },
+    });
+    return;
+  }
+
+  // Generic errors with statusCode (e.g., from Express middleware)
+  if (err && typeof err === "object" && "statusCode" in err) {
+    const statusCode = (err as any).statusCode;
+    res.status(statusCode).json({
+      error: {
+        code: (err as any).code || "ERROR",
+        message: (err as any).message || "Error",
         requestId: req.id,
       },
     });

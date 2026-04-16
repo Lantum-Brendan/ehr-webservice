@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireRole } from "@core/guards/roleGuard.js";
-import { ForbiddenError } from "@core/errors/appError.js";
+import { ForbiddenError } from "@core/errors/appError.ts";
 import { CreateAppointmentUseCase } from "../application/createAppointmentUseCase.js";
 import { UpdateAppointmentUseCase } from "../application/updateAppointmentUseCase.js";
 import { CancelAppointmentUseCase } from "../application/cancelAppointmentUseCase.js";
@@ -149,7 +149,9 @@ appointmentRouter.put(
       let preloadedAppointment: Appointment | undefined;
 
       if (isPatientCancel) {
-        preloadedAppointment = await getAppointmentUseCase.execute(req.params.id);
+        preloadedAppointment = await getAppointmentUseCase.execute(
+          req.params.id,
+        );
         assertPatientOwnsAppointment(req.user?.id, preloadedAppointment);
       }
 

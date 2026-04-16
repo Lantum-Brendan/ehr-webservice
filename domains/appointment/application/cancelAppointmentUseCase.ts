@@ -6,7 +6,7 @@ import {
   ConflictError,
   NotFoundError,
   ForbiddenError,
-} from "@core/errors/appError.js";
+} from "@core/errors/appError.ts";
 import { getAppointmentClinicSettings } from "../infrastructure/appointmentClinicSettings.js";
 
 interface CancelAppointmentInput {
@@ -51,7 +51,8 @@ export class CancelAppointmentUseCase {
 
     if (input.isPatientCancel) {
       const hoursUntilAppointment =
-        (appointment.scheduledStart.getTime() - now.getTime()) / (1000 * 60 * 60);
+        (appointment.scheduledStart.getTime() - now.getTime()) /
+        (1000 * 60 * 60);
 
       if (hoursUntilAppointment < cutoffHours) {
         this.logger.warn(

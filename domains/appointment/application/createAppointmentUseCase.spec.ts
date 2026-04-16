@@ -3,7 +3,7 @@ import { type IAppointmentRepository } from "../domain/appointmentRepository.js"
 import { type IPatientRepository } from "@domains/patient/domain/patientRepository.js";
 import { type IEventBus } from "@shared/event-bus/event-bus.interface.js";
 import { type Logger } from "@shared/logger/index.js";
-import { NotFoundError, ConflictError } from "@core/errors/appError.js";
+import { NotFoundError, ConflictError } from "@core/errors/appError.ts";
 
 vi.mock("@infrastructure/database/prisma.client.js", () => ({
   prisma: {
@@ -26,9 +26,8 @@ const { prisma } = await import("@infrastructure/database/prisma.client.js");
 const { Appointment } = await import("../domain/appointmentEntity.js");
 const { CreateAppointmentUseCase } =
   await import("./createAppointmentUseCase.js");
-const { resetAppointmentClinicSettingsCache } = await import(
-  "../infrastructure/appointmentClinicSettings.js"
-);
+const { resetAppointmentClinicSettingsCache } =
+  await import("../infrastructure/appointmentClinicSettings.js");
 
 const mockPatientRepo: Partial<IPatientRepository> = {
   findById: vi.fn(),

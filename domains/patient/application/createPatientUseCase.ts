@@ -2,7 +2,7 @@ import { Patient } from "../domain/patientEntity.js";
 import { IPatientRepository } from "../domain/patientRepository.js";
 import { IEventBus } from "@shared/event-bus/event-bus.interface.js";
 import { type Logger } from "@shared/logger/index.js";
-import { ConflictError } from "@core/errors/appError.js";
+import { ConflictError } from "@core/errors/appError.ts";
 
 interface CreatePatientInput {
   mrn: string;

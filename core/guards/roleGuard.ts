@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { ForbiddenError } from "../errors/appError.js";
+import { ForbiddenError } from "../errors/appError.ts";
 
 export interface UserInfo {
   id: string;

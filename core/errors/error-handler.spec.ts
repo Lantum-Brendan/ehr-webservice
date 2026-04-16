@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { errorHandler } from "./error-handler.js";
+import { NotFoundError, ForbiddenError, ConflictError } from "./appError.js";
 import { Request, Response } from "express";
+import { ZodError } from "zod";
 
 vi.mock("../../shared/logger/index.js", () => ({
   logger: {
@@ -21,22 +23,6 @@ function makeRes() {
     return res as any;
   };
   return res as unknown as Response;
-}
-
-class NotFoundError extends Error {
-  code = "NOT_FOUND";
-  constructor(message: string) {
-    super(message);
-    this.name = "NotFoundError";
-  }
-}
-
-class ForbiddenError extends Error {
-  code = "FORBIDDEN";
-  constructor(message: string) {
-    super(message);
-    this.name = "ForbiddenError";
-  }
 }
 
 describe("errorHandler", () => {
@@ -83,11 +69,18 @@ describe("errorHandler", () => {
     expect((res as any).body.error.message).toBe("Something went wrong");
   });
 
-  it("returns 422 for Zod-like validation error", () => {
+  it("returns 422 for Zod validation error", () => {
     const res = makeRes();
-    const zodLike = { errors: [{ message: "bad" }], name: "ZodError" };
+    const zodErr = new ZodError([
+      {
+        code: "invalid_type",
+        path: ["name"],
+        message: "Expected string",
+        params: {},
+      },
+    ]);
     errorHandler(
-      zodLike as any,
+      zodErr,
       { path: "/", method: "GET", id: "r" } as any,
       res,
       vi.fn(),
@@ -111,8 +104,7 @@ describe("errorHandler", () => {
 
   it("returns 409 for conflict errors", () => {
     const res = makeRes();
-    const err = new Error("Resource already exists");
-    (err as any).statusCode = 409;
+    const err = new ConflictError("Resource already exists");
     errorHandler(
       err,
       { path: "/", method: "POST", id: "r" } as any,
